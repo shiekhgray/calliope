@@ -9,6 +9,7 @@ import SearchPage from './pages/SearchPage'
 import PlaylistsPage from './pages/PlaylistsPage'
 import PlaylistPage from './pages/PlaylistPage'
 import ReleasesPage from './pages/ReleasesPage'
+import NowPlayingPage from './pages/NowPlayingPage'
 
 function RequireAuth({ children }) {
   const { loggedIn } = useAuth()
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="playlists" element={<PlaylistsPage />} />
         <Route path="playlists/:id" element={<PlaylistPage />} />
         <Route path="releases" element={<ReleasesPage />} />
+        <Route path="now-playing" element={<NowPlayingPage />} />
       </Route>
     </Routes>
   )

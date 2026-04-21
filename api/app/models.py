@@ -1,9 +1,11 @@
 from datetime import datetime
 
 from sqlalchemy import (
-    BigInteger, Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+    ARRAY, BigInteger, Boolean, Column, Date, DateTime, Float,
+    ForeignKey, Integer, String, Text, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
@@ -117,6 +119,25 @@ class SearchHistory(Base):
     visited_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (UniqueConstraint("user_id", "entity_type", "entity_id"),)
+
+
+class TrackVector(Base):
+    __tablename__ = "track_vectors"
+
+    track_id = Column(Integer, ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True)
+    feature_vector = Column(Vector(38), nullable=False)
+    file_mtime = Column(BigInteger, nullable=False)
+
+    track = relationship("Track")
+
+
+class VectorNormParams(Base):
+    __tablename__ = "vector_norm_params"
+
+    id = Column(Integer, primary_key=True)
+    means = Column(ARRAY(Float), nullable=False)
+    stds = Column(ARRAY(Float), nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
 class PlaylistTrack(Base):

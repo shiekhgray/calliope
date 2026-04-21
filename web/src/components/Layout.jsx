@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { usePlayer } from '../player/PlayerContext'
 import PlayerBar from './PlayerBar'
 import ChangePasswordModal from './ChangePasswordModal'
 import api from '../api/client'
+import { useAlbumAccent } from '../hooks/useAlbumAccent'
 
 function UserMenu({ username, onLogout }) {
   const [open, setOpen] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
-  const [scanState, setScanState] = useState('idle') // idle | scanning | done
+  const [scanState, setScanState] = useState('idle') // idle | scanning | indexing | done
   const ref = useRef(null)
   const pollRef = useRef(null)
 
@@ -33,6 +35,8 @@ function UserMenu({ username, onLogout }) {
             clearInterval(pollRef.current)
             setScanState('done')
             setTimeout(() => setScanState('idle'), 3000)
+          } else if (r.data.phase === 'indexing') {
+            setScanState('indexing')
           }
         })
       }, 2000)
@@ -44,8 +48,9 @@ function UserMenu({ username, onLogout }) {
   }
 
   const scanLabel =
-    scanState === 'scanning' ? 'Scanning…' :
     scanState === 'done'     ? 'Scan complete' :
+    scanState === 'indexing' ? 'Indexing…' :
+    scanState === 'scanning' ? 'Scanning…' :
                                'Rescan library'
 
   return (
@@ -76,6 +81,11 @@ function UserMenu({ username, onLogout }) {
 export default function Layout() {
   const { logout, username } = useAuth()
   const navigate = useNavigate()
+  const { currentTrack } = usePlayer()
+  const albumArtUrl = currentTrack?.album_id
+    ? `/calliope/api/albums/${currentTrack.album_id}/art`
+    : null
+  useAlbumAccent(albumArtUrl)
 
   function handleLogout() {
     logout()
@@ -85,7 +95,7 @@ export default function Layout() {
   return (
     <div className="app-shell">
       <nav className="top-nav">
-        <span className="nav-brand">Calliope</span>
+        <Link to="/now-playing" className="nav-brand">Calliope</Link>
         <div className="nav-links">
           <NavLink to="/">Library</NavLink>
           <NavLink to="/search">Search</NavLink>

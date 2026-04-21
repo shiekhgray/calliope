@@ -46,12 +46,24 @@ function VolumeControl({ volume, setVolume }) {
 }
 
 export default function PlayerBar() {
-  const { currentTrack, isPlaying, progress, duration, volume, togglePlay, seek, skipNext, skipPrev, setVolume } = usePlayer()
+  const { currentTrack, isPlaying, progress, duration, volume, radioMode, togglePlay, seek, skipNext, skipPrev, setVolume, toggleRadioMode } = usePlayer()
 
   if (!currentTrack) return null
 
   return (
     <div className="player-bar">
+      {currentTrack.album_id ? (
+        <Link to="/now-playing" className="player-art-link">
+          <img
+            src={`/calliope/api/albums/${currentTrack.album_id}/art`}
+            className="player-art-thumb"
+            alt=""
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
+        </Link>
+      ) : (
+        <div className="player-art-thumb player-art-placeholder" />
+      )}
       <div className="player-track-info">
         <span className="player-title">{currentTrack.title}</span>
         <div className="player-links">
@@ -77,6 +89,13 @@ export default function PlayerBar() {
           {isPlaying ? '⏸' : '▶'}
         </button>
         <button onClick={skipNext} title="Next">⏭</button>
+        <button
+          className={`radio-btn${radioMode ? ' radio-btn--on' : ''}`}
+          onClick={toggleRadioMode}
+          title={radioMode ? 'Radio: on' : 'Radio: off'}
+        >
+          ≋
+        </button>
       </div>
 
       <div className="player-progress">

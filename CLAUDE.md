@@ -10,11 +10,21 @@ Designed for home server deployment with a native Android app including Android 
 calliope/
   api/              ← FastAPI (Python), runs in Docker
     scripts/        ← scan.py and seed_users.py live here (inside build context)
+  indexer/          ← Similarity engine; separate Docker container (built, not yet deployed)
+    app/
+      main.py       ← plain Python stdlib HTTP server; POST /index + GET /status
+      index.py      ← MFCC/chroma feature extraction + pgvector upsert + norm param recompute
+      config.py     ← DATABASE_URL, MUSIC_ROOT from env
+      database.py
+      models.py     ← TrackVector + VectorNormParams only
+    Dockerfile      ← python:3.12-slim + libsndfile1 + ffmpeg + librosa
+    requirements.txt
   web/              ← React + Vite, runs as Docker container (dev server)
   android/          ← Kotlin + Jetpack Compose (not yet started)
   nginx/            ← nginx config snippets
   scripts/          ← host-side utility scripts (bandcamp_import.py)
   prd/              ← PRD files, one per feature/phase
+  .claude/commands/ ← custom slash commands (expert agents + workflows)
   docker-compose.yml
   README.md         ← operator reference (DB access, useful queries, commands)
   CLAUDE.md
@@ -26,23 +36,25 @@ calliope/
 | Layer       | Technology                              |
 |-------------|------------------------------------------|
 | API         | Python, FastAPI, uvicorn                |
+| Indexer     | Python stdlib HTTP server, librosa, numpy, pgvector (separate container) |
 | Database    | PostgreSQL 16                           |
 | Migrations  | Alembic                                 |
 | ORM         | SQLAlchemy                              |
 | Auth        | JWT (python-jose + bcrypt)              |
 | Audio tags  | Mutagen                                 |
-| Web         | React, Vite, React Router, React Query  |
+| Web         | React, Vite, React Router, React Query, node-vibrant v4 |
+| Similarity  | librosa, numpy, pgvector — indexer container + API numpy query |
 | Android     | Kotlin, Jetpack Compose, Media3/ExoPlayer |
-| Containers  | Docker Compose (API + PostgreSQL + Web) |
+| Containers  | Docker Compose (API + PostgreSQL + Web + Indexer) |
 | Proxy       | Nginx (existing, extended)              |
 
 ## Infrastructure
 
 - **Home server**: Linux, i7, plenty of RAM, SSD + magnetic RAID
 - **API container**: Ubuntu LTS base image
-- **DB container**: PostgreSQL 16 official image
+- **DB container**: `pgvector/pgvector:pg16` image (NOT stock postgres:16 — stock image lacks the vector extension needed for similarity engine)
 - **Web container**: node:22-slim, runs Vite dev server on port 5173
-- **Music files**: `/var/www/html/calliope/music/` — mounted **read-write** into the API container (needed for album art uploads writing `Folder.jpg`)
+- **Music files**: `/backup/calliope/music/` — mounted **read-write** into the API container (needed for album art uploads writing `Folder.jpg`)
 - **Nginx**: Already running for other services (wiki). Calliope proxied alongside it.
 - **Public URL**: `https://dresdengray.com/calliope/` — nginx proxies `/calliope/api/` → port 8000, `/calliope` → port 5173 (Vite). HTTPS via Let's Encrypt, auto-renewing.
 - **Home DNS**: `dresdengray.com` — Vite `allowedHosts` includes this so the dev server accepts requests from it.
@@ -56,7 +68,7 @@ Two users seeded via `api/scripts/seed_users.py`:
 
 ## Music Library
 
-- Location: `/var/www/html/calliope/music/`
+- Location: `/backup/calliope/music/`
 - Structure: `Artist/Album/Track.mp3`
 - ~255 artists, ~2500 audio files
 - Formats: MP3 (primary), M4A, WAV — all must be handled
@@ -84,6 +96,10 @@ playlists          id, owner_id, title, description, created_at
 playlist_tracks    id, playlist_id, track_id, position
 discoveries        id, artist_id, itunes_collection_id (unique bigint), album_title, release_date, artwork_url, dismissed, first_seen_at
 search_history     id, user_id, entity_type ('artist'|'album'|'track'), entity_id, visited_at; UNIQUE(user_id, entity_type, entity_id)
+
+── added in migration 0006 (similarity engine) ──
+track_vectors      track_id (FK unique), feature_vector vector(38), file_mtime bigint
+vector_norm_params id (always 1), means float[38], stds float[38], updated_at
 ```
 
 `cover_art_path` is a relative path from the music root to the cover image.
@@ -169,6 +185,7 @@ web/src/
     PlaylistsPage.jsx      ← list + create/delete
     PlaylistPage.jsx       ← playlist detail + remove tracks
     ReleasesPage.jsx       ← iTunes-powered new release discovery; refresh button; dismiss per card
+    NowPlayingPage.jsx     ← /now-playing; large art + scrubber + controls + queue context + similar tracks
 ```
 
 ### Key conventions
@@ -207,7 +224,7 @@ web/src/
 ## What Has Been Built
 
 ### Infrastructure (Phase 1 — complete)
-- `docker-compose.yml` — postgres:16 + api + web; `version:` header is obsolete in Compose v2 but left in place
+- `docker-compose.yml` — pgvector/pgvector:pg16 + api + web + indexer; `version:` header is obsolete in Compose v2 but left in place
 - `api/Dockerfile` — Ubuntu 24.04, Python venv at `/venv`
 - `web/Dockerfile` — node:22-slim, runs `npm run dev`; src volume-mounted for HMR
 - `nginx/calliope.conf` — drop-in location block, proxy_buffering off, proxy_force_ranges on
@@ -261,7 +278,7 @@ web/src/
 
 ### Web App (Phase 4 — complete)
 - See `web/` structure above
-- Dark theme, purple accent (#a855f7)
+- Dark theme, default purple accent (#a855f7) — dynamically overridden per current track (see Dynamic Color Theme below)
 - Track rows show `bitrate_kbps` in a muted right-aligned column (`.track-bitrate` in index.css)
 - Track rows show `play_count` in a muted right-aligned column (`.track-play-count`); blank when 0
 - Playlist drag-and-drop reorder: native HTML5 DnD; optimistic local state via `localTracks` useState; fires `PUT /playlists/{id}/tracks/reorder`; reverts on API error
@@ -271,7 +288,7 @@ web/src/
 - Search results: albums now return `artist_id`, `artist_name` (explicit dict, not raw model)
 - `SearchPage.jsx`: album cards show artist name as a link; track rows show `Artist — Album` links below the title
 
-### Search History (complete — API smoke-tested, UI not yet browser-verified)
+### Search History (complete — browser-tested)
 - Migration `0005_add_search_history.py` applied to production DB
 - `SearchHistory` model in `models.py` — UNIQUE(user_id, entity_type, entity_id)
 - `GET /search/history` — auth required; fetches top 10 newest entries; resolves names via separate per-type queries merged in Python; orphaned entries (deleted library items) silently omitted
@@ -300,6 +317,44 @@ web/src/
 - Dismiss from artist page invalidates both `['discoveries', 'artist', id]` and global `['discoveries']` so the Releases page stays in sync
 - Dismiss button only shown when `loggedIn` (uses `useAuth()`)
 
+### Similarity Engine + Radio Mode (deployed and indexing)
+- `indexer/` — separate Docker container; python:3.12-slim + libsndfile1 + ffmpeg; librosa==0.10.2, numpy==1.26.4, pgvector==0.3.6
+- `indexer/app/main.py` — plain Python stdlib HTTP server on port 8001; `POST /index` (202/409), `GET /status` (`{running, indexed, to_index}`)
+- `indexer/app/index.py` — `extract_features()`: loads first 60s via librosa, returns 38-dim vector (13 MFCC mean + 13 MFCC var + 12 chroma mean); `run_indexing()`: incremental by file mtime; recomputes z-score norm params after batch
+- `api/alembic/versions/0006_add_pgvector.py` — enables vector extension, creates track_vectors + vector_norm_params + HNSW cosine index. **Applied to production DB.**
+- `api/app/models.py` — `TrackVector` + `VectorNormParams` models added
+- `api/requirements.txt` — added numpy==1.26.4, pgvector==0.3.6
+- `api/app/routers/tracks.py` — `GET /tracks/{id}/similar?limit=25` (auth required): fetches all vectors, z-score normalizes + L2-normalizes in numpy, returns cosine-similar tracks; 404 if track not yet indexed
+- `api/app/routers/scanner.py` — now has two phases: "scanning" (scan.py subprocess) + "indexing" (calls indexer via urllib, polls until done); `/scanner/status` proxies `{indexed, to_index}` from indexer when phase=="indexing"
+- `web/src/player/PlayerContext.jsx` — `radioMode` (localStorage-persisted, default on), `toggleRadioMode()`, `_extendWithRadio()` fires when queue empties; filters by sessionPlayed + seed album_id; `history` state (most-recent-first, cap 10) tracks played tracks; `queue` + `queueIndex` exposed from context
+- `web/src/components/PlayerBar.jsx` — `≋` radio toggle button (accent when on); album art thumbnail (48×48) links to `/now-playing`; player-bar grid is `auto 1fr auto 1fr`
+- **Indexing speed**: much faster than estimated ~2s/track in practice; 388+ tracks indexed within minutes of first run
+- **Similarity query is brute-force numpy** (not pgvector ANN) — fetches all ~3k vectors, normalizes, dot-product. Fast enough at this scale; HNSW index is forward-looking.
+
+### Now Playing Page (complete — browser-tested)
+- `web/src/pages/NowPlayingPage.jsx` — route `/now-playing`, nested inside Layout (PlayerBar still visible)
+- Two-column grid layout: left = art + controls, right = queue context
+- **Left column**: large album art (`40vmin` square), track title, artist·album·year meta (year from `GET /albums/{id}` React Query — usually cached), wide scrubber, ⏮⏪⏯⏩⏭ controls (⏪/⏩ = ±15s), horizontal volume slider, radio toggle
+- **Right column sections**: Played (2 past tracks oldest-first, link to album page), Now Playing (animated equalizer + accent color), Up Next (2 ahead; if radio on and <2 in queue, shows "Radio will continue…" placeholders), Similar (5 tracks via `/tracks/{id}/similar?limit=5`; hidden entirely if track not indexed)
+- **PlayerContext additions**: `history` state array (most-recent-first, capped at 10); pushed on `onended` and `skipNext`; reset on `playTrack`; `queue` + `queueIndex` now exposed from context value
+- **PlayerBar**: album art thumbnail added as first grid column (`auto 1fr auto 1fr`); thumbnail links to `/now-playing`; `onError` hides broken image
+- **Layout**: "Calliope" nav brand is now a `<Link to="/now-playing">` (was a plain `<span>`)
+- **Equalizer animation**: `.np-equalizer` — 3 bars, CSS `@keyframes np-eq` scaleY animation with staggered delays
+- **Similar section**: uses React Query key `['similar', trackId]`; disabled when no currentTrack; hidden (not placeholder) when track not yet indexed (API returns 404, query returns null/empty)
+
+### Dynamic Color Theme (complete — browser-tested)
+- `web/src/hooks/useAlbumAccent.js` — called from `Layout.jsx`; extracts Vibrant palette from current track's album art URL; derives three accent tiers; animates via `requestAnimationFrame`
+- `node-vibrant` v4 installed (`import { Vibrant } from 'node-vibrant/browser'`). In `package.json` and in the container's `node_modules`.
+- **Three dynamic CSS variables** (all animated together in sRGB):
+  - `--accent` — main accent; Vibrant hue at `baseL` (pinned 0.52–0.72); used for page titles (`.page h2`, `.page-header h2`), player album/artist links, general UI
+  - `--accent-hover` — lighter tier (`baseL + 0.22`, max 0.92); used for hover states
+  - `--accent2` — darker tier (`baseL - 0.22`, min 0.40); used for `.nav-brand` (Calliope logo)
+  - `--accent-dim` — `--accent` hex + `33` (20% alpha suffix); set alongside `--accent`
+- **Fallbacks**: `--accent` → `#a855f7`, `--accent-hover` → `#c084fc`, `--accent2` → `#7e22ce`
+- **Animation**: JS `requestAnimationFrame` loop, ease-in-out, 500ms, sRGB linear interpolation. Cancellation flag prevents stale Vibrant responses from stomping a newer animation.
+- **Why not CSS `@property` + transition**: Chromium interpolates `@property` `<color>` values in OKLab by default; transitions between high-chroma complementary colors pass through a washed-out near-white midpoint. sRGB interpolation in JS avoids this entirely.
+- **Art element flash fix**: `.np-art` and `.player-art-thumb` have `background: var(--surface2)` — unloaded images show dark grey instead of browser-default white.
+
 ## Infrastructure Gotchas
 
 - **Docker version**: Upgraded to Docker CE 20.10 + Compose v2 (plugin). Use `docker compose` (space, not hyphen). The `version:` header in docker-compose.yml is now obsolete and ignored — harmless warning.
@@ -311,11 +366,35 @@ web/src/
 - **Node.js**: Server has Node 14 system install. nvm is installed; use `nvm use 22` (LTS). Web container uses node:22-slim so Docker builds are unaffected.
 - **scan.py location**: Must live at `api/scripts/scan.py` (inside the Docker build context). Moving it outside `api/` will cause "No such file or directory" errors at runtime.
 - **API container requires rebuild for code changes**: `api/` is baked into the image, not volume-mounted (only music files are). After changing any Python file or migration, run `docker compose build api && docker compose up -d api`. Migrations must be applied separately after restart: `docker compose exec api alembic upgrade head`.
-- **Alembic migrations applied**: `0001` through `0005` — all applied to production DB.
+- **Alembic migrations applied**: `0001` through `0006` — all applied to production DB.
+- **pgvector requires pgvector/pgvector:pg16 image**: stock `postgres:16` does not include the vector extension. Switched DB image to `pgvector/pgvector:pg16` — data volume persisted through the image swap without issue.
+- **Collation version mismatch warning**: after switching to pgvector image, Postgres logs "collation version mismatch" (old image had glibc 2.41, new has 2.36). Cosmetic only — does not affect functionality. Can be silenced with `ALTER DATABASE calliope REFRESH COLLATION VERSION` if desired.
 - **Scanner router path bug**: `scanner.py` was resolving the scan script path with one too many `.parent` calls, landing at `/scripts/scan.py` instead of `/app/scripts/scan.py`. Fixed. Symptom: web UI rescan silently failed (exit code 2) while manual `docker compose exec` run worked fine.
 - **Music volume is read-write**: Changed from `:ro` to `:rw` to support album art uploads writing `Folder.jpg`. This is intentional — do not revert to read-only.
 - **Album art upload Content-Type**: do NOT manually set `Content-Type: multipart/form-data` on the axios PUT call — omit it entirely and let the browser set it automatically with the correct boundary. The old override was removed.
 - **`/calliope/` path move**: service moved from root to `/calliope/` subpath. Several hardcoded `/api/` URLs in the frontend had to be updated to `/calliope/api/`. Files affected: `AlbumPage.jsx` (img src + audio upload), `ArtistPage.jsx` (img src), `SearchPage.jsx` (img src), `PlayerContext.jsx` (audio.src), `AuthContext.jsx` (login POST).
+
+## Expert Agent Slash Commands (`.claude/commands/`)
+
+Four subsystem expert agents, each loading its codebase at invocation time:
+
+- `/api` — FastAPI backend: all endpoints, models, migrations, auth, scanner, Docker workflow
+- `/web` — React frontend: all pages, PlayerContext/AuthContext APIs, CSS vars, React Query keys, conventions
+- `/android` — Kotlin/Compose/ExoPlayer: architecture, API contract, not yet coded
+- `/similarity` — MFCC/chroma pipeline, pgvector schema, incremental indexing, radio mode design
+
+Also:
+- `/import-music` — import Amazon/Bandcamp zips from `~/Music/` staging area
+- `/coffee` — load session context at start
+- `/beer` — save session state before context clear
+
+## Planned Features (PRDs written, not yet implemented)
+
+- **Web-Based Music Import** (`prd/web-import.md`) — drag-and-drop zip upload at `/import`; Bandcamp (`Artist - Album.zip`, flat zip) and Amazon (two-level subdirectory, `__` encodes `/`) formats auto-detected; synchronous upload (no background task); auto-triggers rescan on success. nginx needs `client_max_body_size 600M` + `proxy_read_timeout 120s`. `scripts/bandcamp_import.py` is NOT removed.
+- **Now Playing Page** (`prd/now-playing-page.md`) — ✓ implemented; `/now-playing` route; large art, wide scrubber, queue history (2 past) + up next (2 ahead) + similar tracks (5); entry via album art thumbnail in PlayerBar OR Calliope logo in nav
+- **Dynamic Color Theme** (`prd/dynamic-theme.md`) — ✓ implemented; see Dynamic Color Theme section above
+- **Spacebar Play/Pause** (`prd/spacebar-playback.md`) — global keydown handler; suppressed in inputs; plays first track on album/artist/playlist pages if nothing loaded
+- **Track Share Links** (`prd/track-share-links.md`) — deep links `/albums/{id}?play={track_id}` and `/playlists/{id}?play={track_id}`; auth redirect via `?redirect=` on login; track row highlight + inline play button on landing
 
 ## Development Notes
 
@@ -325,3 +404,4 @@ web/src/
 - No browser offline support required
 - Scanner lives in `api/scripts/` and can also be triggered via the web UI (user menu → Rescan Library)
 - **Project tracking**: `.todo` is a lean PRD index. Full specs live in `prd/`. Use `/coffee` at session start to load context from `.todo` + relevant PRDs.
+- **Expert agents**: use `/api`, `/web`, `/android`, `/similarity` when working in those subsystems — each loads its own file context at invocation

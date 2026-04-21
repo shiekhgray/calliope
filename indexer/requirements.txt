@@ -1,0 +1,5 @@
+sqlalchemy==2.0.40
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+librosa==0.10.2
+numpy==1.26.4

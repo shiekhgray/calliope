@@ -15,16 +15,27 @@ export function PlayerProvider({ children }) {
   const [duration, setDuration] = useState(0)   // seconds
   const [volume, setVolumeState] = useState(1)  // 0–1
 
+  // Radio mode — persisted to localStorage; default on
+  const radioModeRef = useRef(localStorage.getItem('radioMode') !== 'false')
+  const [radioMode, setRadioModeState] = useState(radioModeRef.current)
+
+  // Track IDs played since last manual playTrack() call — used to avoid repeats in radio
+  const sessionPlayedRef = useRef(new Set())
+
+  // Play history — most-recent first, capped at 10
+  const [history, setHistory] = useState([])
+
   audio.ontimeupdate = () => setProgress(audio.currentTime)
   audio.ondurationchange = () => setDuration(audio.duration || 0)
   audio.onended = () => {
     setIsPlaying(false)
-    // record the play before advancing
     setCurrentTrack((ct) => {
-      if (ct) api.post(`/tracks/${ct.id}/played`).catch(() => {})
+      if (ct) {
+        api.post(`/tracks/${ct.id}/played`).catch(() => {})
+        setHistory((h) => [ct, ...h].slice(0, 10))
+      }
       return ct
     })
-    // auto-advance
     setQueue((q) => {
       setQueueIndex((i) => {
         const next = i + 1
@@ -32,9 +43,38 @@ export function PlayerProvider({ children }) {
           _loadTrack(q[next])
           return next
         }
+        // Queue exhausted — extend via radio if enabled
+        if (radioModeRef.current) {
+          _extendWithRadio()
+        }
         return i
       })
       return q
+    })
+  }
+
+  function _extendWithRadio() {
+    setCurrentTrack((ct) => {
+      if (!ct) return ct
+      sessionPlayedRef.current.add(ct.id)
+      const seedAlbumId = ct.album_id
+      api.get(`/tracks/${ct.id}/similar?limit=25`)
+        .then((res) => {
+          const candidates = res.data.filter(
+            (t) => !sessionPlayedRef.current.has(t.id) && t.album_id !== seedAlbumId
+          )
+          if (candidates.length > 0) {
+            const next = candidates[0]
+            setQueue((q) => {
+              const newQueue = [...q, next]
+              setQueueIndex(newQueue.length - 1)
+              _loadTrack(next)
+              return newQueue
+            })
+          }
+        })
+        .catch(() => {})
+      return ct
     })
   }
 
@@ -47,6 +87,9 @@ export function PlayerProvider({ children }) {
   }
 
   function playTrack(track, trackList = []) {
+    // Reset session tracking and history on every manual play
+    sessionPlayedRef.current = new Set([track.id])
+    setHistory([])
     const list = trackList.length ? trackList : [track]
     const idx = list.findIndex((t) => t.id === track.id)
     setQueue(list)
@@ -77,6 +120,7 @@ export function PlayerProvider({ children }) {
   function skipNext() {
     const next = queueIndex + 1
     if (next < queue.length) {
+      if (currentTrack) setHistory((h) => [currentTrack, ...h].slice(0, 10))
       setQueueIndex(next)
       _loadTrack(queue[next])
     }
@@ -94,10 +138,18 @@ export function PlayerProvider({ children }) {
     }
   }
 
+  function toggleRadioMode() {
+    const next = !radioModeRef.current
+    radioModeRef.current = next
+    setRadioModeState(next)
+    localStorage.setItem('radioMode', String(next))
+  }
+
   return (
     <PlayerContext.Provider value={{
-      currentTrack, isPlaying, progress, duration, volume,
-      playTrack, togglePlay, seek, skipNext, skipPrev, setVolume,
+      currentTrack, isPlaying, progress, duration, volume, radioMode,
+      history, queue, queueIndex,
+      playTrack, togglePlay, seek, skipNext, skipPrev, setVolume, toggleRadioMode,
     }}>
       {children}
     </PlayerContext.Provider>

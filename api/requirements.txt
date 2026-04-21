@@ -9,3 +9,5 @@ mutagen==1.47.0
 python-multipart==0.0.20
 pydantic-settings==2.9.1
 aiofiles==24.1.0
+numpy==1.26.4
+pgvector==0.3.6

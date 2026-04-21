@@ -2,7 +2,7 @@ version: "2.2"
 
 services:
   db:
-    image: postgres:16
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: calliope
@@ -39,9 +39,21 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       MUSIC_ROOT: /music
     volumes:
-      - /var/www/html/calliope/music:/music
+      - /backup/calliope/music:/music
     ports:
       - "127.0.0.1:8000:8000"
+
+  indexer:
+    build: ./indexer
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://calliope:${DB_PASSWORD}@db:5432/calliope
+      MUSIC_ROOT: /music
+    volumes:
+      - /backup/calliope/music:/music:ro
 
 volumes:
   pg_data:
