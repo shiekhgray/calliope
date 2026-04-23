@@ -11,7 +11,12 @@ router = APIRouter(prefix="/artists", tags=["artists"])
 
 @router.get("")
 def list_artists(db: Session = Depends(get_db)):
-    return db.query(models.Artist).order_by(models.Artist.name).all()
+    return (
+        db.query(models.Artist)
+        .filter(models.Artist.name != "Various Artists")
+        .order_by(models.Artist.name)
+        .all()
+    )
 
 
 @router.get("/{artist_id}/albums")
@@ -33,6 +38,38 @@ def list_albums(artist_id: int, db: Session = Depends(get_db)):
             "cover_art_path": a.cover_art_path,
             "artist_id": a.artist_id,
             "artist_name": artist.name,
+        }
+        for a in albums
+    ]
+
+
+@router.get("/{artist_id}/compilations")
+def list_artist_compilations(artist_id: int, db: Session = Depends(get_db)):
+    artist = db.get(models.Artist, artist_id)
+    if not artist:
+        raise HTTPException(status_code=404)
+    va = db.query(models.Artist).filter_by(name="Various Artists").first()
+    if not va:
+        return []
+    albums = (
+        db.query(models.Album)
+        .join(models.Track, models.Track.album_id == models.Album.id)
+        .filter(
+            models.Album.artist_id == va.id,
+            models.Track.track_artist_id == artist_id,
+        )
+        .distinct()
+        .order_by(models.Album.year, models.Album.title)
+        .all()
+    )
+    return [
+        {
+            "id": a.id,
+            "title": a.title,
+            "year": a.year,
+            "cover_art_path": a.cover_art_path,
+            "artist_id": va.id,
+            "artist_name": va.name,
         }
         for a in albums
     ]

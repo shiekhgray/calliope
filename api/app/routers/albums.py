@@ -35,6 +35,8 @@ def get_album(album_id: int, db: Session = Depends(get_db)):
                 "bitrate_kbps": t.bitrate_kbps,
                 "format": t.format,
                 "play_count": t.play_count,
+                "track_artist": t.track_artist,
+                "track_artist_id": t.track_artist_id,
             }
             for t in album.tracks
         ],

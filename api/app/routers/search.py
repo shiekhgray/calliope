@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Response
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -13,9 +13,10 @@ router = APIRouter(prefix="/search", tags=["search"])
 @router.get("")
 def search(q: str = Query(min_length=1), db: Session = Depends(get_db)):
     like = f"%{q}%"
-    artists = db.query(models.Artist).filter(models.Artist.name.ilike(like)).limit(20).all()
-    albums = db.query(models.Album).filter(models.Album.title.ilike(like)).limit(20).all()
-    tracks = db.query(models.Track).filter(models.Track.title.ilike(like)).limit(50).all()
+    unaccent_like = func.unaccent(like)
+    artists = db.query(models.Artist).filter(func.unaccent(models.Artist.name).ilike(unaccent_like)).limit(20).all()
+    albums = db.query(models.Album).filter(func.unaccent(models.Album.title).ilike(unaccent_like)).limit(20).all()
+    tracks = db.query(models.Track).filter(func.unaccent(models.Track.title).ilike(unaccent_like)).limit(50).all()
 
     return {
         "artists": artists,

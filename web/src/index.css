@@ -202,7 +202,17 @@ input, textarea { font: inherit; }
 .modal-success { color: var(--accent); margin-bottom: 8px; }
 
 /* ── Track actions ── */
-.track-actions { width: 32px; text-align: center; }
+.track-actions { width: 64px; text-align: center; }
+.track-actions-group { display: flex; align-items: center; gap: 2px; justify-content: flex-end; }
+
+/* ── Track share ── */
+.track-row--highlighted { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent) !important; }
+.track-share-btn { color: var(--text-dim); font-size: 0.85rem; width: 24px; height: 24px; border-radius: 4px; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
+tr:hover .track-share-btn { opacity: 1; }
+.track-share-btn:hover { color: var(--accent); background: var(--surface2); }
+.track-share-tooltip { font-size: 0.72rem; color: var(--accent); white-space: nowrap; }
+.track-highlight-play-btn { margin-left: 10px; font-size: 0.78rem; color: var(--accent); background: var(--surface2); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 8px; flex-shrink: 0; }
+.track-highlight-play-btn:hover { background: var(--accent); color: #fff; }
 .track-drag { width: 20px; text-align: center; color: var(--text-dim); opacity: 0.4; cursor: grab; font-size: 1rem; }
 .track-drag:active { cursor: grabbing; }
 tr[draggable]:hover .track-drag { opacity: 0.8; }
@@ -381,3 +391,41 @@ a.np-queue-track:hover .np-qt-artist { color: var(--accent-hover); }
   justify-content: center; gap: 16px; height: 50vh;
 }
 .np-empty-msg { color: var(--text-dim); font-size: 1.2rem; }
+
+/* User menu link items (e.g. Import Music) */
+.user-menu-popup a { display: block; width: 100%; text-align: left; padding: 9px 14px; font-size: 0.9rem; color: var(--text); white-space: nowrap; text-decoration: none; }
+.user-menu-popup a:hover { background: var(--border); color: var(--danger); }
+
+/* Import page */
+.import-dropzone {
+  border: 2px dashed var(--border); border-radius: 12px;
+  padding: 48px 32px; text-align: center; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 20px;
+}
+.import-dropzone:hover, .import-dropzone--over {
+  border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.import-dropzone-inner { display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; }
+.import-dropzone-icon { font-size: 2rem; color: var(--accent); }
+.import-dropzone-label { font-size: 1.1rem; font-weight: 600; color: var(--text); }
+.import-dropzone-sub { font-size: 0.85rem; color: var(--text-dim); }
+.import-file-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+.import-file-row {
+  display: grid; grid-template-columns: 1.2rem 1fr auto;
+  align-items: baseline; gap: 10px;
+  padding: 8px 12px; border-radius: 6px; background: var(--surface);
+  font-size: 0.9rem;
+}
+.import-file-icon { font-weight: 700; text-align: center; }
+.import-file-name { color: var(--text); word-break: break-all; }
+.import-file-detail { color: var(--text-dim); font-size: 0.85rem; white-space: nowrap; }
+.import-status-ok .import-file-icon { color: #4ade80; }
+.import-status-error .import-file-icon { color: var(--danger); }
+.import-status-warning .import-file-icon { color: #facc15; }
+.import-status-uploading .import-file-icon { color: var(--text-dim); }
+.import-actions { display: flex; align-items: center; gap: 16px; }
+.import-scan-status { font-size: 0.9rem; color: var(--text-dim); }
+.import-scan-done { color: var(--accent); }
+.import-progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; min-width: 120px; }
+.import-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.2s ease; }

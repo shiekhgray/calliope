@@ -10,7 +10,7 @@ export function PlayerProvider({ children }) {
   const [currentTrack, setCurrentTrack] = useState(null)
   const [queue, setQueue] = useState([])
   const [queueIndex, setQueueIndex] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(null)
   const [progress, setProgress] = useState(0)   // seconds
   const [duration, setDuration] = useState(0)   // seconds
   const [volume, setVolumeState] = useState(1)  // 0–1
@@ -123,6 +123,9 @@ export function PlayerProvider({ children }) {
       if (currentTrack) setHistory((h) => [currentTrack, ...h].slice(0, 10))
       setQueueIndex(next)
       _loadTrack(queue[next])
+    } else if (radioModeRef.current) {
+      if (currentTrack) setHistory((h) => [currentTrack, ...h].slice(0, 10))
+      _extendWithRadio()
     }
   }
 

@@ -67,6 +67,7 @@ def read_tags(path: Path) -> dict:
     result = {
         "title": path.stem,
         "artist": None,
+        "albumartist": None,
         "album": None,
         "track_number": None,
         "year": None,
@@ -99,6 +100,7 @@ def read_tags(path: Path) -> dict:
     if ext in (".mp3", ".wav"):
         result["title"] = first("title") or path.stem
         result["artist"] = first("artist")
+        result["albumartist"] = first("albumartist")
         result["album"] = first("album")
         result["year"] = _parse_year(first("date"))
         result["genres"] = _parse_list(audio.tags, "genre") if audio.tags else []
@@ -108,6 +110,7 @@ def read_tags(path: Path) -> dict:
     elif ext == ".m4a":
         result["title"] = first("title") or path.stem
         result["artist"] = first("artist")
+        result["albumartist"] = first("aART")
         result["album"] = first("album")
         result["year"] = _parse_year(first("date"))
         result["genres"] = _parse_list(audio.tags, "genre") if audio.tags else []
@@ -189,6 +192,8 @@ def upsert_track(
     tags: dict,
     file_path_rel: str,
     fmt: str,
+    track_artist: str | None = None,
+    track_artist_id: int | None = None,
 ) -> models.Track:
     track = db.query(models.Track).filter_by(file_path=file_path_rel).first()
     if not track:
@@ -200,14 +205,19 @@ def upsert_track(
             bitrate_kbps=tags["bitrate_kbps"],
             file_path=file_path_rel,
             format=fmt,
+            track_artist=track_artist,
+            track_artist_id=track_artist_id,
         )
         db.add(track)
         db.flush()
     else:
+        track.album_id = album.id
         track.title = tags["title"]
         track.track_number = tags["track_number"]
         track.duration_ms = tags["duration_ms"]
         track.bitrate_kbps = tags["bitrate_kbps"]
+        track.track_artist = track_artist
+        track.track_artist_id = track_artist_id
     return track
 
 
@@ -255,6 +265,7 @@ def scan(music_root: Path):
                 album_title = album_dir.name
                 cover_art = find_cover_art(album_dir, music_root)
                 album_obj = None  # lazy
+                artist_obj = None  # reset per album so albumartist tag is re-evaluated
 
                 for track_file in sorted(album_dir.iterdir()):
                     if track_file.name.lower() in IGNORED_NAMES:
@@ -268,8 +279,8 @@ def scan(music_root: Path):
                     fmt = track_file.suffix.lstrip(".").lower()
                     file_path_rel = str(track_file.relative_to(music_root))
 
-                    # Use directory name as artist/album fallback if tags are empty
-                    effective_artist = tags["artist"] or artist_name
+                    # albumartist tag takes priority for album ownership (compilations)
+                    effective_artist = tags["albumartist"] or tags["artist"] or artist_name
                     effective_album = tags["album"] or album_title
 
                     if artist_obj is None:
@@ -282,7 +293,15 @@ def scan(music_root: Path):
                         )
                         counts["albums"] += 1
 
-                    track_obj = upsert_track(db, album_obj, tags, file_path_rel, fmt)
+                    # For compilation tracks, store per-track artist separately
+                    track_artist = None
+                    track_artist_id = None
+                    if tags["albumartist"] and tags["artist"] and tags["albumartist"] != tags["artist"]:
+                        track_artist = tags["artist"]
+                        track_artist_obj = upsert_artist(db, tags["artist"])
+                        track_artist_id = track_artist_obj.id
+
+                    track_obj = upsert_track(db, album_obj, tags, file_path_rel, fmt, track_artist, track_artist_id)
                     upsert_genres(db, track_obj, tags["genres"])
                     counts["tracks"] += 1
 

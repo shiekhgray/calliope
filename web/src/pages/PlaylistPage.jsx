@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import api from '../api/client'
 import { usePlayer } from '../player/PlayerContext'
+import { useRegisterFirstTrack } from '../hooks/useSpacebarPlayback'
 import AddToPlaylistMenu from '../components/AddToPlaylistMenu'
 
 function fmt(ms) {
@@ -50,6 +51,12 @@ export default function PlaylistPage() {
       setLocalTracks(null)
       qc.invalidateQueries({ queryKey: ['playlist', id] })
     },
+  })
+
+  useRegisterFirstTrack(() => {
+    const entries = playlist?.entries ?? []
+    const first = (localTracks ?? entries.map((e) => e.track))[0]
+    return first ?? null
   })
 
   if (isLoading || !playlist) return <div className="loading">Loading…</div>

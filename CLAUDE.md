@@ -78,10 +78,10 @@ Two users seeded via `api/scripts/seed_users.py`:
 - Duplicate tracks (same track as both .mp3 and .m4a) exist — leave them alone, do not deduplicate
 - Non-audio noise files present: `desktop.ini`, `.DS_Store`, `.db` — scanner must ignore these
 - **Adding music**: drop files into the directory structure, then use "Rescan Library" in the web UI user menu
-- **Bandcamp imports**: use `scripts/bandcamp_import.py` (runs on the host, not in Docker). See `prd/bandcamp-import.md`. Format: `Artist - Album.zip`. Dry-run with `--dry-run`. After import, trigger a rescan.
-- **Amazon Music imports**: download zips land in `~/Music/<date>/`. Use `/import-music` skill to extract and rescan. Amazon encodes `/` as `__` in filenames (e.g. `start__end.mp3`) — the ID3 tags usually have the correct title; verify in the browser after import.
-- **Import staging dir**: `~/Music/` — drop Amazon zips or loose Artist/Album dirs here, then run `/import-music`
-- **`/import-music` skill**: `.claude/commands/import-music.md` — inventories `~/Music/`, checks for duplicates, extracts zips, copies loose dirs, runs scanner, reports counts, offers cleanup
+- **Bandcamp imports**: use the web UI at `/import` (drag-and-drop). Zips must follow `Artist - Album.zip` naming. The old `scripts/bandcamp_import.py` still works for bulk/scripted workflows.
+- **Amazon Music imports**: use the web UI at `/import` (drag-and-drop). Amazon zips use a two-level subdirectory structure (`Artist/Album/track.mp3`). Amazon encodes `/` as `__` in filenames — the importer decodes these automatically. No cover art in Amazon zips; upload art via the album page afterward.
+- **Import page** (`/import`): auth required; detects format automatically; shows per-file results + progress bar; auto-triggers rescan on full success. "Import Music" in the user menu.
+- **`/import-music` skill**: `.claude/commands/import-music.md` — legacy CLI-based import for zips in `~/Music/`; still useful for bulk imports outside the browser
 
 ## Database Schema
 
@@ -100,6 +100,10 @@ search_history     id, user_id, entity_type ('artist'|'album'|'track'), entity_i
 ── added in migration 0006 (similarity engine) ──
 track_vectors      track_id (FK unique), feature_vector vector(38), file_mtime bigint
 vector_norm_params id (always 1), means float[38], stds float[38], updated_at
+
+── added in migration 0007 (compilation albums) ──
+tracks.track_artist    VARCHAR nullable — contributing artist name for compilation tracks; NULL on normal tracks
+tracks.track_artist_id INTEGER nullable FK→artists — resolved artist record for track_artist
 ```
 
 `cover_art_path` is a relative path from the music root to the cover image.
@@ -152,6 +156,11 @@ POST   /discover/refresh        ← auth required, 409 if already running; backg
 GET    /discover/status         ← {running, last_refreshed}
 GET    /discover                ← non-dismissed discoveries not already in library (filtered by artist+title); optional ?artist_id= to scope to one artist
 POST   /discover/{id}/dismiss   ← auth required; sets dismissed=true permanently
+
+GET    /compilations            ← all albums owned by "Various Artists" artist; {id, title, year, cover_art_path, track_count}
+GET    /artists/{id}/compilations ← compilation albums with at least one track where track_artist_id = this artist; {id, title, year, cover_art_path, artist_id, artist_name}
+GET    /artists                 ← EXCLUDES "Various Artists" from results (kept in DB, just not returned)
+GET    /albums/{id}             ← tracks now include track_artist (nullable str) + track_artist_id (nullable int)
 ```
 
 **Important**: Several endpoints return explicit dicts (not raw SQLAlchemy models) to include
@@ -170,10 +179,13 @@ web/src/
   auth/
     AuthContext.jsx        ← loggedIn, username, login(), logout(); username stored in localStorage
     LoginPage.jsx
+  hooks/
+    useAlbumAccent.js      ← Vibrant palette extraction + JS sRGB animation; called from Layout
+    useSpacebarPlayback.js ← global spacebar handler (useSpacebarPlayback for Layout) + page first-track registration (useRegisterFirstTrack)
   player/
-    PlayerContext.jsx      ← singleton Audio element; queue, play/pause, seek, volume; fires POST /tracks/{id}/played on onended
+    PlayerContext.jsx      ← singleton Audio element; queue, play/pause, seek, volume; fires POST /tracks/{id}/played on onended; isPlaying is null (nothing loaded) | false (paused) | true (playing)
   components/
-    Layout.jsx             ← top nav + player bar shell; UserMenu with change-password modal + Rescan Library
+    Layout.jsx             ← top nav + player bar shell; UserMenu with Import Music link + Rescan Library + change-password modal
     PlayerBar.jsx          ← fixed bottom bar; volume popover; album/artist links
     AddToPlaylistMenu.jsx  ← "+" popover on every track row
     ChangePasswordModal.jsx
@@ -186,6 +198,8 @@ web/src/
     PlaylistPage.jsx       ← playlist detail + remove tracks
     ReleasesPage.jsx       ← iTunes-powered new release discovery; refresh button; dismiss per card
     NowPlayingPage.jsx     ← /now-playing; large art + scrubber + controls + queue context + similar tracks
+    CompilationsPage.jsx   ← /compilations; grid of VA albums; links to /albums/{id}
+    ImportPage.jsx         ← /import; drag-and-drop zip upload; Bandcamp + Amazon; progress bar; auto-rescan
 ```
 
 ### Key conventions
@@ -248,11 +262,12 @@ web/src/
 - `albums.py` — GET /albums/{id} (tracks include play_count), GET /albums/{id}/art, PUT /albums/{id}/art
 - `tracks.py` — GET /tracks/{id}/stream (full byte-range support, 512KB chunks), POST /tracks/{id}/played
 - `genres.py` — GET /genres
-- `search.py` — GET /search?q=; GET /search/history (auth, joined across 3 entity types); POST /search/history (auth, upsert + prune to 10)
+- `search.py` — GET /search?q=; GET /search/history (auth, joined across 3 entity types); POST /search/history (auth, upsert + prune to 10). Uses `func.unaccent()` on both query and name/title columns so accent-insensitive search works (e.g. "royksopp" finds "Röyksopp"). Requires `unaccent` PostgreSQL extension (already enabled: `CREATE EXTENSION IF NOT EXISTS unaccent`).
 - `playlists.py` — full CRUD + add/remove/reorder; GET /{id} returns track entries with names
 - `auth.py` — login, refresh, me, change-password
 - `scanner.py` — POST /scanner/trigger (auth required, background task), GET /scanner/status
 - `discover.py` — POST /discover/refresh (background task), GET /discover/status, GET /discover?artist_id= (optional filter), POST /discover/{id}/dismiss
+- `import_music.py` — POST /import/upload (auth required); multipart upload of one or more zips; Bandcamp + Amazon format detection; synchronous extraction; returns per-file {status, artist, album, tracks_imported}
 
 ### Auth (`api/app/auth.py`)
 - Uses `bcrypt` directly (NOT passlib — passlib 1.7.4 is broken with bcrypt 4.x)
@@ -272,9 +287,12 @@ web/src/
 - **Does NOT touch play_count** — rescan is safe, play history is preserved
 - Genres upserted from ID3/M4A genre tags, no duplicates
 - Progress logged every 100 tracks
-- Scanned result: 253 artists, 410 albums, 2717 tracks (after EDEN "vertigo" + "Dark" import)
+- Scanned result: 398 artists, 398 albums, 2748 tracks (last known good scan)
 - **Bitrate**: read from `audio.info.bitrate` (bps) and stored as `bitrate_kbps` (integer kbps). WAV files may yield null — that's fine.
 - **Bug fixed**: `upsert_genres` had a dead first line that set `existing_genre_ids` from `track.playlist_entries` (wrong relationship), immediately overwritten by the correct line. Was harmless on first scan (no playlist entries yet) but crashed on re-scan. Removed the dead line.
+- **Compilation support**: reads `albumartist` tag (EasyID3: `albumartist`, EasyMP4: `aART`). If present, uses it as album's owning artist instead of `artist` tag. When `albumartist != artist`, stores `track_artist` (name) + `track_artist_id` (FK) on the track.
+- **Critical scanner invariant**: `artist_obj` resets per `album_dir` (not per `artist_dir`). If it only reset per artist_dir, a VA album with a non-"Various Artists" albumartist tag would corrupt `artist_obj` for subsequent albums in the same directory.
+- **Critical scanner invariant**: `upsert_track` updates `album_id` on existing tracks. Without this, tracks scanned under the wrong album on a first pass can never be corrected by a rescan.
 
 ### Web App (Phase 4 — complete)
 - See `web/` structure above
@@ -326,7 +344,8 @@ web/src/
 - `api/requirements.txt` — added numpy==1.26.4, pgvector==0.3.6
 - `api/app/routers/tracks.py` — `GET /tracks/{id}/similar?limit=25` (auth required): fetches all vectors, z-score normalizes + L2-normalizes in numpy, returns cosine-similar tracks; 404 if track not yet indexed
 - `api/app/routers/scanner.py` — now has two phases: "scanning" (scan.py subprocess) + "indexing" (calls indexer via urllib, polls until done); `/scanner/status` proxies `{indexed, to_index}` from indexer when phase=="indexing"
-- `web/src/player/PlayerContext.jsx` — `radioMode` (localStorage-persisted, default on), `toggleRadioMode()`, `_extendWithRadio()` fires when queue empties; filters by sessionPlayed + seed album_id; `history` state (most-recent-first, cap 10) tracks played tracks; `queue` + `queueIndex` exposed from context
+- `web/src/player/PlayerContext.jsx` — `radioMode` (localStorage-persisted, default on), `toggleRadioMode()`, `_extendWithRadio()` fires when queue empties (via `onended`) **and** when `skipNext()` is called at end of queue; filters by sessionPlayed + seed album_id; `history` state (most-recent-first, cap 10) tracks played tracks; `queue` + `queueIndex` exposed from context
+- **Bug fixed**: `skipNext()` only advanced if `next < queue.length` — at end of queue it did nothing in radio mode. Fix: `else if (radioModeRef.current) { _extendWithRadio() }` branch added.
 - `web/src/components/PlayerBar.jsx` — `≋` radio toggle button (accent when on); album art thumbnail (48×48) links to `/now-playing`; player-bar grid is `auto 1fr auto 1fr`
 - **Indexing speed**: much faster than estimated ~2s/track in practice; 388+ tracks indexed within minutes of first run
 - **Similarity query is brute-force numpy** (not pgvector ANN) — fetches all ~3k vectors, normalizes, dot-product. Fast enough at this scale; HNSW index is forward-looking.
@@ -355,6 +374,49 @@ web/src/
 - **Why not CSS `@property` + transition**: Chromium interpolates `@property` `<color>` values in OKLab by default; transitions between high-chroma complementary colors pass through a washed-out near-white midpoint. sRGB interpolation in JS avoids this entirely.
 - **Art element flash fix**: `.np-art` and `.player-art-thumb` have `background: var(--surface2)` — unloaded images show dark grey instead of browser-default white.
 
+### Spacebar Play/Pause (complete — browser-tested)
+- `web/src/hooks/useSpacebarPlayback.js` — exports two things:
+  - `useSpacebarPlayback()` — global `keydown` listener; called once from `Layout.jsx`; toggles play/pause when something is loaded (`isPlaying !== null`); calls first-track getter when nothing loaded
+  - `useRegisterFirstTrack(fn)` — pages call this to register a callback that returns the page's first track; uses a module-level ref so only one registration is active at a time (cleared on unmount)
+- **Architecture**: single listener in Layout handles toggle on every page; page-specific "play first track" behavior is registered via `useRegisterFirstTrack` on AlbumPage, ArtistPage, PlaylistPage. Other pages (Library, Search, Releases, etc.) get toggle-only behavior automatically.
+- **`isPlaying` initial state**: changed from `false` → `null` in `PlayerContext.jsx` — `null` means nothing has ever been loaded; `false` means loaded but paused. The hook uses `isPlaying !== null` to distinguish these cases.
+- **Input suppression**: spacebar does nothing when focus is on `INPUT`, `TEXTAREA`, or `contenteditable` — safe in search box, playlist rename field, change-password modal.
+- **`e.preventDefault()`** called when handled — prevents page scroll.
+
+### Track Share Links (complete — album page only)
+- `web/src/pages/AlbumPage.jsx` — `ShareButton` component: hover-revealed 🔗 icon per track row; builds `{origin}/calliope/albums/{id}?play={track_id}&note={artist}_{album}`; clipboard write; "Copied!" replaces icon for 1.5s in-place (no toast)
+- **`?note=` slug**: `slugify(artistName) + '_' + slugify(albumTitle)` — lowercase, non-alphanumeric → `_`, trim leading/trailing `_`. Human-readable, fully machine-ignored. Does NOT include track title.
+- **Deep link handling**: `AlbumPage` reads `?play=` on load; after album data arrives, scrolls highlighted row into view (100ms timeout), attempts `playTrack()` — browser blocks autoplay on fresh load; highlighted row shows `▶ Play` inline fallback button until track becomes active
+- **Highlighted row**: `.track-row--highlighted` — 3px accent left border + 8% accent background tint. Persists until the track becomes active (inline button disappears once `active` class takes over).
+- **`RequireAuth` in `App.jsx`**: now encodes current `location.pathname + location.search` as `?redirect=` when redirecting unauthenticated users to `/login` — share links received while logged out land correctly after login
+- **`LoginPage.jsx`**: reads `?redirect=` from `useSearchParams()`; navigates to redirect target (or `/`) after successful login
+- **Playlist share links deferred**: playlist links are only useful once playlist permissions exist (otherwise anyone can browse any playlist URL already). Will add share button to `PlaylistPage` with `?note={playlist}` slug as part of the Playlist Permissions PRD.
+- CSS additions: `.track-actions-group` (flex wrapper for + and 🔗), `.track-share-btn` (hidden until row hover), `.track-share-tooltip`, `.track-highlight-play-btn`, `.track-row--highlighted`. `.track-actions` width widened from 32px to 64px to fit both buttons.
+
+### Web-Based Music Import (complete — browser-tested)
+- `api/app/routers/import_music.py` — `POST /import/upload`; detects Bandcamp (flat zip + `Artist - Album.zip` filename) vs Amazon (2-level subdirectory structure); returns per-file result list
+- **Bandcamp extraction**: artist/album from filename; strips `Artist - Album - ` prefix from track filenames; `cover.jpg` → `Folder.jpg`
+- **Amazon extraction**: artist/album from subdirectory names; `__` → `/` decoding applied to dir and file names; also copies any image files at the album level (e.g. `Folder.jpg`)
+- **Format detection**: two-level audio files → Amazon; flat audio files + ` - ` in filename stem → Bandcamp; else error with rename hint
+- `web/src/pages/ImportPage.jsx` — drop zone (click or drag), per-file status rows (✓/✗/⚠/…), upload progress bar via axios `onUploadProgress`, auto-triggers rescan when all files succeed, manual "Rescan Library" button if any failed
+- "Import Music" link in UserMenu popup — required adding `.user-menu-popup a` CSS rule (was previously only styled for `button` elements)
+- **nginx**: `client_max_body_size 600M` + `proxy_read_timeout 120s` added to `/etc/nginx/default.d/calliope.conf` (the deployed location on this server)
+- **Do not use real artist/album names for test zips** — test data writes to the actual music library; use "Test Artist / Test Album" style names
+
+### Compilation Albums (complete — browser-tested)
+- `scripts/tag_compilations.py` — host-side script; stamps `albumartist = "Various Artists"` on all tracks under `/backup/calliope/music/Various Artists/`. Run with `--dry-run` first. Requires mutagen on host (`pip3 install mutagen`).
+- Per-artist duplicate dirs (e.g. `Therion/Gothic Spirits 5/`) were deleted from disk; 7 now-empty artist dirs also removed.
+- Migration `0007_add_track_artist.py` applied. Scanner updated; rescan done (395 artists, 395 albums, 2701 tracks after cleanup).
+- `api/app/routers/compilations.py` — new router; registered in `main.py`
+- `web/src/pages/CompilationsPage.jsx` — `/compilations` route; album grid with track count
+- `AlbumPage.jsx` — compilation mode: Artist column inserted between track# and title when any track has `track_artist` set
+- `ArtistPage.jsx` — "Appears On" section below Albums grid; fetches `GET /artists/{id}/compilations`
+- **DB cleanup completed**: 57 orphan empty albums deleted; collation version mismatch silenced (`ALTER DATABASE calliope REFRESH COLLATION VERSION`); `The Lights` artist (albumartist tag mismatch) merged into `Lights` — 34 track_artist_id refs updated, empty artist record deleted.
+- **albumartist tag mismatches to watch for**: if an artist's files have `albumartist` set to a different name than their directory, the scanner will create them under the tag name. Fix by retagging the files and doing a rescan + manual DB merge if needed. Röyksopp was the known case — **resolved** (see below).
+- **Röyksopp consolidation (done)**: files were split across `Royksopp/Junior/` (no umlaut, `artist` tag mismatch) and `Röyksopp/Senior/`. Fixed by: (1) moving Junior into `Röyksopp/`, (2) retagging Junior files so `artist = Röyksopp`, (3) deleting orphaned tracks + stale `Royksopp` artist from DB after rescan. `cover_art_path` also needed a manual UPDATE since the scanner matches albums by (artist_id, title), not path.
+- **Moving a directory orphans its tracks in the DB**: `upsert_track` matches by `file_path`. If an artist/album dir is renamed, the scanner inserts new track records for the new paths and leaves old records behind. After any `mv`, delete orphaned tracks manually: `DELETE FROM track_genres WHERE track_id IN (SELECT id FROM tracks WHERE file_path LIKE 'OldPath/%'); DELETE FROM track_vectors WHERE ...; DELETE FROM tracks WHERE file_path LIKE 'OldPath/%';`
+- **Moving a directory breaks album art**: `cover_art_path` is a relative path baked into the `albums` row. After any `mv`, update it manually: `UPDATE albums SET cover_art_path = 'NewPath/Folder.jpg' WHERE ...`
+
 ## Infrastructure Gotchas
 
 - **Docker version**: Upgraded to Docker CE 20.10 + Compose v2 (plugin). Use `docker compose` (space, not hyphen). The `version:` header in docker-compose.yml is now obsolete and ignored — harmless warning.
@@ -366,12 +428,13 @@ web/src/
 - **Node.js**: Server has Node 14 system install. nvm is installed; use `nvm use 22` (LTS). Web container uses node:22-slim so Docker builds are unaffected.
 - **scan.py location**: Must live at `api/scripts/scan.py` (inside the Docker build context). Moving it outside `api/` will cause "No such file or directory" errors at runtime.
 - **API container requires rebuild for code changes**: `api/` is baked into the image, not volume-mounted (only music files are). After changing any Python file or migration, run `docker compose build api && docker compose up -d api`. Migrations must be applied separately after restart: `docker compose exec api alembic upgrade head`.
-- **Alembic migrations applied**: `0001` through `0006` — all applied to production DB.
+- **Alembic migrations applied**: `0001` through `0007` — all applied to production DB.
 - **pgvector requires pgvector/pgvector:pg16 image**: stock `postgres:16` does not include the vector extension. Switched DB image to `pgvector/pgvector:pg16` — data volume persisted through the image swap without issue.
-- **Collation version mismatch warning**: after switching to pgvector image, Postgres logs "collation version mismatch" (old image had glibc 2.41, new has 2.36). Cosmetic only — does not affect functionality. Can be silenced with `ALTER DATABASE calliope REFRESH COLLATION VERSION` if desired.
+- **Collation version mismatch warning**: after switching to pgvector image, Postgres logs "collation version mismatch" (old image had glibc 2.41, new has 2.36). **Already silenced** — `ALTER DATABASE calliope REFRESH COLLATION VERSION` was run. If it reappears after a DB image upgrade, run it again.
 - **Scanner router path bug**: `scanner.py` was resolving the scan script path with one too many `.parent` calls, landing at `/scripts/scan.py` instead of `/app/scripts/scan.py`. Fixed. Symptom: web UI rescan silently failed (exit code 2) while manual `docker compose exec` run worked fine.
 - **Music volume is read-write**: Changed from `:ro` to `:rw` to support album art uploads writing `Folder.jpg`. This is intentional — do not revert to read-only.
 - **Album art upload Content-Type**: do NOT manually set `Content-Type: multipart/form-data` on the axios PUT call — omit it entirely and let the browser set it automatically with the correct boundary. The old override was removed.
+- **nginx calliope config location**: deployed at `/etc/nginx/default.d/calliope.conf` (not sites-enabled). Copy from `nginx/calliope.conf` and `sudo nginx -s reload` to apply changes.
 - **`/calliope/` path move**: service moved from root to `/calliope/` subpath. Several hardcoded `/api/` URLs in the frontend had to be updated to `/calliope/api/`. Files affected: `AlbumPage.jsx` (img src + audio upload), `ArtistPage.jsx` (img src), `SearchPage.jsx` (img src), `PlayerContext.jsx` (audio.src), `AuthContext.jsx` (login POST).
 
 ## Expert Agent Slash Commands (`.claude/commands/`)
@@ -390,11 +453,16 @@ Also:
 
 ## Planned Features (PRDs written, not yet implemented)
 
-- **Web-Based Music Import** (`prd/web-import.md`) — drag-and-drop zip upload at `/import`; Bandcamp (`Artist - Album.zip`, flat zip) and Amazon (two-level subdirectory, `__` encodes `/`) formats auto-detected; synchronous upload (no background task); auto-triggers rescan on success. nginx needs `client_max_body_size 600M` + `proxy_read_timeout 120s`. `scripts/bandcamp_import.py` is NOT removed.
+- **Web-Based Music Import** (`prd/web-import.md`) — ✓ implemented; see Web-Based Music Import section above
 - **Now Playing Page** (`prd/now-playing-page.md`) — ✓ implemented; `/now-playing` route; large art, wide scrubber, queue history (2 past) + up next (2 ahead) + similar tracks (5); entry via album art thumbnail in PlayerBar OR Calliope logo in nav
 - **Dynamic Color Theme** (`prd/dynamic-theme.md`) — ✓ implemented; see Dynamic Color Theme section above
-- **Spacebar Play/Pause** (`prd/spacebar-playback.md`) — global keydown handler; suppressed in inputs; plays first track on album/artist/playlist pages if nothing loaded
-- **Track Share Links** (`prd/track-share-links.md`) — deep links `/albums/{id}?play={track_id}` and `/playlists/{id}?play={track_id}`; auth redirect via `?redirect=` on login; track row highlight + inline play button on landing
+- **Genre Tagging** (`prd/genre-tagging.md`) — album-level genre chips on AlbumPage (writes to all tracks); three interaction modes: Fetch (Last.fm `album.getInfo`), Suggest (similarity k-NN), Add/search (autocomplete). Per-artist fetch button on ArtistPage calls `artist.getTopTags` and bulk-applies to all albums. Read-only genre preview on Releases discovery cards. Requires `LASTFM_API_KEY` in `.env`. **iTunes/Apple Music NOT used for genres** — their API returns only one broad `primaryGenreName` per item; Last.fm crowd-sourced tags are richer. Similarity suggest algorithm: walk outward until K=10 tagged neighbors found OR M=50 total checked (both configurable via query params); top 3 by frequency returned, genres already on the album excluded.
+- **Spacebar Play/Pause** (`prd/spacebar-playback.md`) — ✓ implemented; see Spacebar Play/Pause section above
+- **Track Share Links** (`prd/track-share-links.md`) — ✓ implemented (album page only); see Track Share Links section above
+- **Playlist Permissions** (`prd/playlist-permissions.md`) — per-playlist view/edit access control; `view_mode`/`edit_mode` columns (`owner|users|everyone`) + `playlist_viewers`/`playlist_editors` join tables; gear panel in playlist detail (owner-only); `GET /playlists` becomes auth-required and filters by visibility; `GET /users` new endpoint; migration `0008` (next available). **Note**: when implementing, reassign "Ellie's playlist" to user `rose` via SQL after migration — see memory file.
+- **Playlist Cards** (`prd/playlist-cards.md`) — replaces flat playlist list with rich cards; 2×2 album art collage from the 4 most "quintessential" tracks (centroid of playlist's normalized vectors, unique album_ids); first 3 track titles as preview; top 4 genre chips (empty until genre tagging ships); all data returned in `GET /playlists` (no N+1). Vector centroid algorithm is the same z-score→L2 pipeline as `/tracks/{id}/similar`.
+- **Vector Expansion** (`prd/vector-expansion.md`) — expand feature vector 38→60 dims by adding chroma variance (12), tempo/BPM (1), RMS mean (1), RMS variance (1), spectral centroid mean (1), tonnetz mean (6). Breaking migration: truncate `track_vectors`, delete `vector_norm_params`, alter column to `vector(60)`, recreate HNSW index, full re-index. **Must ship before or alongside Similarity Weights.** Rename note: existing `sim_weight_dynamics` column → `sim_weight_timbral_variation` when this ships.
+- **Similarity Weights** (`prd/similarity-weights.md`) — per-user 9-slider UI (0–10, default 5) in user menu ("Sound Matching"); **depends on Vector Expansion**. Full 60-dim dimension map: Tone Color (0–12), Timbral Variation (13–25), Harmonic Content (26–37), Chord Movement (38–49), Tempo (50), Loudness (51), Dynamic Range (52), Brightness (53), Tonal Character (54–59). Sliders grouped in modal: Timbre / Harmony / Rhythm & Energy. Stored as 9 integers on `users` table; applied server-side as `weight/5.0` multiplier before L2-norm. On save, invalidates `['me']` + `['similar', currentTrackId]` so Now Playing refreshes automatically.
 
 ## Development Notes
 

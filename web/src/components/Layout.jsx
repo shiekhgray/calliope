@@ -6,6 +6,7 @@ import PlayerBar from './PlayerBar'
 import ChangePasswordModal from './ChangePasswordModal'
 import api from '../api/client'
 import { useAlbumAccent } from '../hooks/useAlbumAccent'
+import { useSpacebarPlayback } from '../hooks/useSpacebarPlayback'
 
 function UserMenu({ username, onLogout }) {
   const [open, setOpen] = useState(false)
@@ -61,6 +62,7 @@ function UserMenu({ username, onLogout }) {
         </button>
         {open && (
           <div className="user-menu-popup">
+            <Link to="/import" onClick={() => setOpen(false)}>Import Music</Link>
             <button
               onClick={startScan}
               disabled={scanState === 'scanning'}
@@ -86,6 +88,7 @@ export default function Layout() {
     ? `/calliope/api/albums/${currentTrack.album_id}/art`
     : null
   useAlbumAccent(albumArtUrl)
+  useSpacebarPlayback()
 
   function handleLogout() {
     logout()
@@ -101,6 +104,7 @@ export default function Layout() {
           <NavLink to="/search">Search</NavLink>
           <NavLink to="/playlists">Playlists</NavLink>
           <NavLink to="/releases">Releases</NavLink>
+          <NavLink to="/compilations">Compilations</NavLink>
         </div>
         <UserMenu username={username} onLogout={handleLogout} />
       </nav>
