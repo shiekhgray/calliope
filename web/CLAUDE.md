@@ -1,0 +1,109 @@
+# Web App — Calliope Frontend
+
+React + Vite. Runs as Docker container. `./web/src` is volume-mounted — edit on host, HMR reloads instantly. No rebuild needed for frontend changes.
+
+## Structure
+
+```
+web/src/
+  api/client.js             ← axios; Bearer token; auto-refresh on 401; baseURL = '/calliope/api'
+  auth/
+    AuthContext.jsx          ← loggedIn, username, login(), logout(); username in localStorage
+    LoginPage.jsx            ← reads ?redirect= param, navigates there after login
+  hooks/
+    useAlbumAccent.js        ← Vibrant palette → 3 CSS var tiers; JS sRGB animation
+    useSpacebarPlayback.js   ← global spacebar toggle + per-page first-track registration
+  player/
+    PlayerContext.jsx        ← singleton Audio; queue, play/pause, seek, volume, radio mode, history
+  components/
+    Layout.jsx               ← nav + player shell; owns spacebar listener; "Calliope" links /now-playing
+    PlayerBar.jsx            ← fixed bottom bar; art thumbnail → /now-playing; ≋ radio toggle
+    AddToPlaylistMenu.jsx    ← "+" popover on every track row
+    ChangePasswordModal.jsx
+  pages/
+    LibraryPage              ← artist list
+    ArtistPage               ← top 10 tracks + albums grid + "Appears On" (compilations) + Missing Releases
+    AlbumPage                ← album header (art upload overlay) + track table + share links
+    SearchPage               ← search + history chips
+    PlaylistsPage            ← list + create/delete
+    PlaylistPage             ← detail + remove/reorder tracks
+    ReleasesPage             ← iTunes discovery; filter + sort; dismiss per card
+    NowPlayingPage           ← /now-playing; large art, scrubber, queue context, similar tracks
+    CompilationsPage         ← /compilations; VA album grid
+    ImportPage               ← /import; drag-and-drop zip; Bandcamp + Amazon; progress bar
+```
+
+## Key Conventions
+
+**API URLs**: anything not going through the axios client (img src, audio.src, direct fetch) must use `/calliope/api/` prefix. The axios client already has `baseURL: '/calliope/api'`. Missing prefix = silent failure (images don't load, audio doesn't play).
+
+**Track enrichment**: `playTrack()` requires `album_id`, `album_title`, `artist_id`, `artist_name`. Missing fields silently drop PlayerBar links — no error, no fallback text.
+
+**isPlaying states**: `null` = nothing ever loaded; `false` = loaded but paused; `true` = playing. Important for spacebar hook: `isPlaying !== null` means "something is loaded, toggle it" vs "play first track on this page".
+
+**Vite proxy**: `/calliope/api` → `http://api:8000` (Docker env) or `http://localhost:8000` (local). Strips the prefix before forwarding to the API.
+
+**Album art upload**: do NOT manually set `Content-Type: multipart/form-data` on the axios PUT — omit it and let the browser set it with the correct boundary automatically.
+
+## PlayerContext API
+
+```js
+{
+  currentTrack,           // track object or null
+  isPlaying,              // null | false | true
+  queue, queueIndex,      // current queue array + position
+  history,                // played tracks, most-recent-first, capped at 10
+  radioMode,              // bool; localStorage-persisted; default on
+  toggleRadioMode(),
+  playTrack(track),       // replaces queue with single track
+  playQueue(tracks, idx), // replaces queue, starts at idx
+  skipNext(), skipPrev(),
+  seek(seconds),
+  setVolume(0–1),
+}
+```
+
+- `history` is pushed on `onended` and `skipNext`; reset on `playTrack`
+- Radio mode extends the queue when it empties (via `onended`) or `skipNext` is called at end of queue
+- `onended` fires POST `/tracks/{id}/played` — fire-and-forget, errors swallowed
+
+## Dynamic Color Theme
+
+Three CSS variables updated on every track change:
+
+| Variable | Value | Used for |
+|---|---|---|
+| `--accent` | Vibrant hue at baseL (clamped 0.52–0.72) | Page titles, links, general UI |
+| `--accent-hover` | baseL + 0.22 (max 0.92) | Hover states |
+| `--accent2` | baseL − 0.22 (min 0.40) | Nav brand |
+| `--accent-dim` | `--accent` hex + `33` | 20% alpha tint |
+
+Fallbacks: `#a855f7` / `#c084fc` / `#7e22ce`. Animation: 500ms ease-in-out sRGB interpolation via `requestAnimationFrame`. CSS `@property` + transition was scrapped — Chromium interpolates `<color>` in OKLab by default, causing washed-out midpoint flash between high-chroma complementary colors.
+
+Art elements (`.np-art`, `.player-art-thumb`) use `background: var(--surface2)` to prevent a white flash while images load.
+
+## Spacebar Playback
+
+`useSpacebarPlayback()` called once from `Layout` — global toggle on every page. Pages register a first-track callback via `useRegisterFirstTrack(fn)` (module-level ref, cleared on unmount). Registered pages: AlbumPage, ArtistPage, PlaylistPage. Input suppression: no-op when focus is on INPUT / TEXTAREA / contenteditable.
+
+## Track Share Links (AlbumPage)
+
+URL format: `{origin}/calliope/albums/{id}?play={trackId}&note={artist}_{album}`
+- `?note=` is slugified `artist_album` — human-readable, machine-ignored. Does not include track title.
+- Deep link: `AlbumPage` reads `?play=` on load, scrolls the row into view (100ms timeout), attempts `playTrack()`. Browser blocks autoplay on fresh load; highlighted row shows `▶ Play` inline fallback button until track becomes active.
+- `RequireAuth` encodes current `pathname + search` as `?redirect=` when bouncing to login; `LoginPage` navigates there after successful login.
+
+## React Query Keys
+
+| Key | Data |
+|---|---|
+| `['artists']` | Artist list |
+| `['artist', id]` | Artist detail (albums, top tracks) |
+| `['album', id]` | Album + tracks |
+| `['similar', trackId]` | Similar tracks via similarity engine |
+| `['playlists']` | Playlist list |
+| `['playlist', id]` | Playlist detail + entries |
+| `['discoveries']` | All non-dismissed discoveries |
+| `['discoveries', 'artist', id]` | Scoped to one artist |
+| `['search-history']` | Current user's 10 most recent visits |
+| `['scanner-status']` | Polled every 2s during rescan |
