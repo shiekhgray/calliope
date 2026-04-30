@@ -1,5 +1,8 @@
 import io
 import re
+import shutil
+import subprocess
+import tempfile
 import zipfile
 from pathlib import Path
 from typing import List
@@ -30,6 +33,13 @@ def _strip_bandcamp_prefix(filename: str, artist: str, album: str) -> str:
     return filename
 
 
+def _transcode_flac_to_mp3(src: Path, dest: Path):
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src), "-q:a", "0", str(dest)],
+        check=True,
+    )
+
+
 def _process_zip(filename: str, data: bytes, music_root: Path) -> dict:
     try:
         zf = zipfile.ZipFile(io.BytesIO(data))
@@ -43,18 +53,48 @@ def _process_zip(filename: str, data: bytes, music_root: Path) -> dict:
         return {"filename": filename, "status": "warning", "message": "No audio files found in zip."}
 
     two_level = [n for n in audio_names if len(Path(n).parts) == 3]
+    one_level = [n for n in audio_names if len(Path(n).parts) == 2]
     flat = [n for n in audio_names if len(Path(n).parts) == 1]
 
     if two_level:
         return _extract_amazon(filename, zf, two_level, music_root)
+    elif one_level and " - " in Path(one_level[0]).parts[0]:
+        return _extract_qobuz(filename, zf, one_level, music_root)
     elif flat and " - " in Path(filename).stem:
         return _extract_bandcamp(filename, zf, flat, names, music_root)
     else:
         return {
             "filename": filename,
             "status": "error",
-            "message": "Could not detect format. Rename to 'Artist - Album.zip' or use a zip with Artist/Album subdirectory structure.",
+            "message": "Could not detect format. Expected: Bandcamp ('Artist - Album.zip' flat), Amazon (Artist/Album/track), or Qobuz ('Artist - Album/' subdirectory with FLACs).",
         }
+
+
+def _extract_qobuz(filename: str, zf: zipfile.ZipFile, audio_names: list, music_root: Path) -> dict:
+    subdir = Path(audio_names[0]).parts[0]
+    artist, _, album = subdir.partition(" - ")
+    artist, album = artist.strip(), album.strip()
+    dest_dir = music_root / artist / album
+    dest_dir.mkdir(parents=True, exist_ok=True)
+
+    if not shutil.which("ffmpeg"):
+        return {"filename": filename, "status": "error", "message": "ffmpeg not found in container — rebuild the API image."}
+
+    count = 0
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            for name in sorted(audio_names):
+                src_name = Path(name).name
+                dest_name = Path(src_name).with_suffix(".mp3").name
+                tmp_flac = tmp_path / src_name
+                tmp_flac.write_bytes(zf.read(name))
+                _transcode_flac_to_mp3(tmp_flac, dest_dir / dest_name)
+                count += 1
+    except subprocess.CalledProcessError as e:
+        return {"filename": filename, "status": "error", "message": f"ffmpeg transcoding failed: {e}"}
+
+    return {"filename": filename, "status": "ok", "artist": artist, "album": album, "tracks_imported": count}
 
 
 def _extract_bandcamp(filename: str, zf: zipfile.ZipFile, audio_names: list, all_names: list, music_root: Path) -> dict:
