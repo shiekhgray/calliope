@@ -13,9 +13,10 @@ export default function ImportPage() {
   const pollRef = useRef(null)
 
   function addFiles(fileList) {
+    const ACCEPTED = /\.(zip|mp3|m4a|wav)$/i
     const items = Array.from(fileList).map(f => {
-      if (!f.name.toLowerCase().endsWith('.zip')) {
-        return { file: f, status: 'error', message: 'Not a zip file.' }
+      if (!ACCEPTED.test(f.name)) {
+        return { file: f, status: 'error', message: 'Unsupported file type. Use .zip, .mp3, or .m4a.' }
       }
       if (f.size > MAX_FILE_BYTES) {
         return { file: f, status: 'error', message: 'File too large (max 600 MB).' }
@@ -113,9 +114,9 @@ export default function ImportPage() {
         <div className="import-dropzone-inner">
           <span className="import-dropzone-icon">↓</span>
           <span className="import-dropzone-label">Drop zip files here</span>
-          <span className="import-dropzone-sub">or click to browse · Bandcamp and Amazon Music formats supported</span>
+          <span className="import-dropzone-sub">or click to browse · Bandcamp, Amazon, and Qobuz zips · loose MP3/M4A singles</span>
         </div>
-        <input ref={inputRef} type="file" accept=".zip" multiple style={{ display: 'none' }} onChange={handleBrowse} />
+        <input ref={inputRef} type="file" accept=".zip,.mp3,.m4a,.wav" multiple style={{ display: 'none' }} onChange={handleBrowse} />
       </div>
 
       {files.length > 0 && (

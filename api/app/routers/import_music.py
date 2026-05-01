@@ -7,6 +7,8 @@ import zipfile
 from pathlib import Path
 from typing import List
 
+from mutagen import File as MutagenFile
+
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.auth import get_current_user
@@ -16,6 +18,33 @@ from app.config import settings
 router = APIRouter(prefix="/import", tags=["import"])
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus"}
+
+
+def _primary_artist(albumartist: str) -> str:
+    return re.split(r",\s*|\sfeat\.\s*", albumartist, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+
+
+def _process_audio_single(filename: str, data: bytes, music_root: Path) -> dict:
+    tags = MutagenFile(io.BytesIO(data), easy=True)
+    if tags is None:
+        return {"filename": filename, "status": "error", "message": "Could not read tags from audio file."}
+
+    raw_artist = (tags.get("albumartist") or tags.get("artist") or [None])[0]
+    album = (tags.get("album") or [None])[0]
+
+    if not raw_artist or not album:
+        return {
+            "filename": filename,
+            "status": "error",
+            "message": f"Missing required tags (albumartist={raw_artist!r}, album={album!r}).",
+        }
+
+    artist = _primary_artist(raw_artist)
+    dest_dir = music_root / artist / album
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    (dest_dir / filename).write_bytes(data)
+
+    return {"filename": filename, "status": "ok", "artist": artist, "album": album, "tracks_imported": 1}
 
 
 def _decode_amazon(name: str) -> str:
@@ -154,6 +183,10 @@ async def upload_import(
     results = []
     for f in files:
         data = await f.read()
-        result = _process_zip(f.filename or "unknown", data, music_root)
+        fname = f.filename or "unknown"
+        if Path(fname).suffix.lower() in {".mp3", ".m4a", ".wav"}:
+            result = _process_audio_single(fname, data, music_root)
+        else:
+            result = _process_zip(fname, data, music_root)
         results.append(result)
     return {"results": results}
