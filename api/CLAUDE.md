@@ -52,6 +52,7 @@ Applied: **0001–0007**. Next number: **0008**.
 | 0005_add_search_history | `search_history` table + index |
 | 0006_add_pgvector | vector extension, `track_vectors`, `vector_norm_params`, HNSW index |
 | 0007_add_track_artist | `track_artist` + `track_artist_id` on `tracks` |
+| 0008_track_credits *(planned)* | `album_artists (album_id, artist_id)`, `track_credits (track_id, artist_id)`; backfill from `track_artist_id`; drop `track_artist` + `track_artist_id` |
 
 Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overridden at runtime via `env.py`. Do not add a value there.
 
@@ -59,7 +60,8 @@ Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overr
 
 - **Bandcamp**: flat zip + `Artist - Album.zip` filename. Strips `Artist - Album - ` prefix from track names. `cover.jpg` → `Folder.jpg`.
 - **Amazon**: two-level subdirectory structure (`Artist/Album/track.mp3`). Decodes `__` → `/` in directory and file names. Copies any image file found at the album level.
-- If neither pattern matches, returns an error with a rename hint.
+- **Qobuz**: one-level subdirectory `Artist - Album/NN Title.flac`. FLACs transcoded to MP3 V0 (~245kbps) via ffmpeg subprocess. No cover art in Qobuz zips. ffmpeg is installed in the API Docker image.
+- If no pattern matches, returns an error describing all three expected formats.
 
 ## Similarity Query
 

@@ -90,7 +90,7 @@ vector_norm_params id (always 1), means float[38], stds float[38], updated_at
 
 - `cover_art_path` is relative from music root; served via API (no direct filesystem exposure)
 - `play_count` — scanner never touches it; rescan is always safe
-- `track_artist` / `track_artist_id` — set on compilation tracks; NULL on normal tracks
+- `track_artist` / `track_artist_id` — set on compilation tracks; NULL on normal tracks. **Planned retirement**: migration 0008 (`track-credits` PRD) will replace both with `track_credits (track_id, artist_id)` + `album_artists (album_id, artist_id)`.
 - `GET /artists` excludes "Various Artists" (kept in DB, filtered at query time)
 
 ## Non-Obvious Rules

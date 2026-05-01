@@ -35,13 +35,15 @@
   - Music source moved to `/backup/calliope/music` this session
   - DB image switched to `pgvector/pgvector:pg16` (stock postgres:16 lacks the vector extension)
   - `/tracks/{id}/similar` works for any track already indexed (404 if not yet)
-- [x] [Web-Based Music Import](prd/web-import.md) — drag-and-drop zip upload page; Bandcamp + Amazon formats; auto-rescan
-  - `api/app/routers/import_music.py` — POST /import/upload; Bandcamp + Amazon format detection + extraction
+- [x] [Web-Based Music Import](prd/web-import.md) — drag-and-drop zip upload page; Bandcamp + Amazon + Qobuz formats; auto-rescan
+  - `api/app/routers/import_music.py` — POST /import/upload; Bandcamp + Amazon + Qobuz format detection + extraction
   - `web/src/pages/ImportPage.jsx` — drop zone, per-file status rows, upload progress bar, auto-rescan on success
   - "Import Music" link added to user menu (Layout.jsx)
   - nginx updated: `client_max_body_size 600M` + `proxy_read_timeout 120s` in `/etc/nginx/default.d/calliope.conf`
   - Amazon extractor copies cover art (Folder.jpg / any image at album level) in addition to audio files
   - Upload progress via axios `onUploadProgress` — button shows "Uploading… 42%" + accent progress bar
+  - Qobuz support added: `Artist - Album/NN Title.flac` format detected; FLACs transcoded to MP3 V0 via ffmpeg
+  - ffmpeg added to API Dockerfile (Ubuntu 24.04 apt); `scripts/qobuz_import.py` added as CLI alternative
 - [x] [Dynamic Color Theme](prd/dynamic-theme.md) — accent color extracted from album art via Vibrant.js
   - `web/src/hooks/useAlbumAccent.js` — Vibrant palette extraction + JS-driven sRGB animation (requestAnimationFrame)
   - Three dynamic tiers: `--accent` (main, page titles + links), `--accent-hover` (lighter, hover states), `--accent2` (darker, nav logo)
@@ -57,6 +59,7 @@
   - `GET /compilations`, `GET /artists/{id}/compilations`, `GET /artists` excludes VA, `GET /albums/{id}` returns track_artist
   - `CompilationsPage.jsx` at `/compilations`; nav link added; AlbumPage shows Artist column on compilations; ArtistPage "Appears On" section
   - DB cleanup done: 57 orphan albums deleted, collation warning silenced, `The Lights` artist merged into `Lights` (albumartist tag mismatch), all track_artist_id refs updated
+- [ ] [Track Credits](prd/track-credits.md) — many-to-many artist attribution; album_artists + track_credits tables; "Singles, Remixes and Collaborations" section on artist page; retire track_artist_id
 - [ ] [Genre Tagging](prd/genre-tagging.md) — album-level chips; Last.fm fetch (per-album + per-artist); similarity suggest; read-only genre preview on Releases cards
 - [x] [Spacebar Play/Pause](prd/spacebar-playback.md) — spacebar toggles playback globally; plays first track on album/artist/playlist pages if nothing loaded
   - `web/src/hooks/useSpacebarPlayback.js` — global handler (called from Layout) + `useRegisterFirstTrack` for pages
