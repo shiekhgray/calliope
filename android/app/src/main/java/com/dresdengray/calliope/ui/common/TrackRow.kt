@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,7 +28,8 @@ fun TrackRow(
     track: Track,
     onClick: () -> Unit = {},
     onAddToPlaylist: (() -> Unit)? = null,
-    onRemove: (() -> Unit)? = null
+    onRemove: (() -> Unit)? = null,
+    isDownloaded: Boolean = false
 ) {
     Row(
         modifier = Modifier
@@ -76,6 +78,17 @@ fun TrackRow(
                 modifier = Modifier
                     .padding(start = 8.dp)
                     .width(28.dp)
+            )
+        }
+
+        if (isDownloaded) {
+            Icon(
+                Icons.Filled.DownloadDone,
+                contentDescription = "Downloaded",
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
             )
         }
 

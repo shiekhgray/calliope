@@ -11,13 +11,17 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DownloadForOffline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -57,6 +61,9 @@ fun PlaylistDetailScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val playerState by playerViewModel.uiState.collectAsState()
+    val downloadUiState by viewModel.downloadUiState.collectAsState()
+    val downloadedTrackIds by viewModel.downloadedTrackIds.collectAsState()
+
     var editMode by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var addToPlaylistTrack: Track? by remember { mutableStateOf(null) }
@@ -77,6 +84,57 @@ fun PlaylistDetailScreen(
                     }
                 },
                 actions = {
+                    // Download button
+                    when (downloadUiState) {
+                        is DownloadUiState.Idle -> {
+                            IconButton(onClick = viewModel::startDownload) {
+                                Icon(
+                                    imageVector = Icons.Filled.DownloadForOffline,
+                                    contentDescription = "Download playlist",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        is DownloadUiState.InProgress -> {
+                            val progress = downloadUiState as DownloadUiState.InProgress
+                            Box(
+                                modifier = Modifier.size(48.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (progress.total > 0) {
+                                    CircularProgressIndicator(
+                                        progress = { progress.done.toFloat() / progress.total },
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+                                IconButton(
+                                    onClick = viewModel::cancelDownload,
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Cancel,
+                                        contentDescription = "Cancel download",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                        is DownloadUiState.Complete -> {
+                            Icon(
+                                imageVector = Icons.Filled.CloudDone,
+                                contentDescription = "Playlist downloaded",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            )
+                        }
+                    }
+
                     IconButton(onClick = { editMode = !editMode }) {
                         Icon(
                             imageVector = if (editMode) Icons.Filled.Check else Icons.Filled.Edit,
@@ -137,7 +195,8 @@ fun PlaylistDetailScreen(
                                 TrackRow(
                                     track = entry.track,
                                     onClick = { playerViewModel.playQueue(tracks, idx) },
-                                    onAddToPlaylist = { addToPlaylistTrack = entry.track }
+                                    onAddToPlaylist = { addToPlaylistTrack = entry.track },
+                                    isDownloaded = entry.track.id in downloadedTrackIds
                                 )
                             }
                             HorizontalDivider(modifier = Modifier.padding(start = if (editMode) 0.dp else 56.dp))

@@ -30,8 +30,8 @@
   - [x] Play count reporting (fires POST /tracks/{id}/played on natural track completion)
   - [x] Android Auto stub (MediaLibrarySession.Callback with root node)
   - [x] Search screen (debounced as-you-type, recent chips via /search/history, three-section results, retry-via-nonce)
-  - [ ] Playlist screens (list, detail, create, delete, add/remove tracks)
-  - [ ] WorkManager playlist downloads + Room DB
+  - [x] Playlist screens (list, detail, create, delete, add/remove tracks, reorder, "add to playlist" sheet from album/artist/search)
+  - [x] WorkManager playlist downloads + Room DB
   - [ ] WiFi guard (warn before streaming on cellular)
   - [ ] Migrate Moshi codegen `kapt → ksp` (build warning; non-blocking until Moshi 2.0)
   - [ ] Build + sign APK, sideload and test

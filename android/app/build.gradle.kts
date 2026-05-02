@@ -60,6 +60,8 @@ dependencies {
     // Navigation
     implementation(libs.androidx.navigation.compose)
     implementation(libs.hilt.navigation.compose)
+    implementation(libs.hilt.work)
+    ksp(libs.hilt.androidx.compiler)
 
     // Retrofit + OkHttp + Moshi
     implementation(libs.retrofit)

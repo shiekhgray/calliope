@@ -12,7 +12,9 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.dresdengray.calliope.data.api.model.Track
+import com.dresdengray.calliope.data.db.DownloadedTrackDao
 import com.dresdengray.calliope.util.Constants
+import java.io.File
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,7 +40,8 @@ data class PlayerUiState(
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val downloadedTrackDao: DownloadedTrackDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -117,7 +120,7 @@ class PlayerViewModel @Inject constructor(
         if (controller.isPlaying) startPositionUpdates()
     }
 
-    /** Play a list of tracks, starting at [startIndex]. */
+    /** Play a list of tracks, starting at [startIndex]. Prefers local downloaded file if available. */
     fun playQueue(tracks: List<Track>, startIndex: Int = 0) {
         _queueTracks.clear()
         _queueTracks.addAll(tracks)
@@ -129,11 +132,17 @@ class PlayerViewModel @Inject constructor(
             )
         }
 
-        val items = tracks.map { it.toMediaItem() }
-        mediaController?.run {
-            setMediaItems(items, startIndex, 0L)
-            prepare()
-            play()
+        viewModelScope.launch {
+            val items = tracks.map { track ->
+                val local = downloadedTrackDao.findDoneByTrackId(track.id.toLong())
+                val localPath = local?.filePath?.takeIf { File(it).exists() }
+                track.toMediaItem(localFilePath = localPath)
+            }
+            mediaController?.run {
+                setMediaItems(items, startIndex, 0L)
+                prepare()
+                play()
+            }
         }
     }
 
@@ -196,7 +205,9 @@ class PlayerViewModel @Inject constructor(
 // Extension helpers
 // ---------------------------------------------------------------------------
 
-private fun Track.toMediaItem(): MediaItem {
+private fun Track.toMediaItem(localFilePath: String? = null): MediaItem {
+    val uri = if (localFilePath != null) Uri.fromFile(File(localFilePath))
+              else Uri.parse(Constants.streamUrl(id))
     val extras = Bundle().apply {
         putInt("albumId", albumId)
         putInt("artistId", artistId)
@@ -204,7 +215,7 @@ private fun Track.toMediaItem(): MediaItem {
         putString("artistName", artistName)
     }
     return MediaItem.Builder()
-        .setUri(Constants.streamUrl(id))
+        .setUri(uri)
         .setMediaId(id.toString())
         .setMediaMetadata(
             MediaMetadata.Builder()
