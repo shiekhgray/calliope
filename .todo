@@ -11,77 +11,38 @@
 - [x] Search result enrichment — albums show artist link; tracks show artist + album links
 - [x] [Releases Filters](prd/releases-filters.md) — client-side filter + sort on Releases page
 - [x] [Artist Missing Releases](prd/artist-missing-releases.md) — Missing Releases section on ArtistPage; GET /discover?artist_id= filter added
+- [x] [Search History](prd/search-history.md) — fully implemented and browser-tested (web)
+- [x] [Now Playing Page](prd/now-playing-page.md) — full-screen player on web (scrubber, transport, history, queue)
+- [x] [Track Credits](prd/track-credits.md) — many-to-many `album_artists` + `track_credits`; migration 0008 applied to prod
+- [x] Album header artist links — clickable artist names on AlbumPage (one per `album_artists` row, falls back to `album.artist_id`)
+- [x] Qobuz zip import support — `scripts/qobuz_import.py` + web import pipeline; ffmpeg in api image
+- [x] Search Screen (Android) — Phase 5 substep; debounced query, recent chips, three-section results
+
+## In Progress
+- [ ] [Phase 5: Android App](prd/phase5-android.md)
+  - [x] Project scaffold (Gradle KTS, Hilt, Retrofit, Moshi, Media3, Room, WorkManager)
+  - [x] Auth layer (login screen, EncryptedSharedPreferences token storage, interceptor, authenticator)
+  - [x] Library browser (Artists → Artist → Album screens)
+  - [x] ExoPlayer + MusicService (MediaLibraryService, auth headers on streams, audio focus, noisy receiver)
+  - [x] PlayerViewModel (MediaController bridge, queue management, position tracking)
+  - [x] MiniPlayerBar (persistent, appears on all screens when playing)
+  - [x] NowPlayingScreen (full-screen player with scrubber and transport controls)
+  - [x] Play count reporting (fires POST /tracks/{id}/played on natural track completion)
+  - [x] Android Auto stub (MediaLibrarySession.Callback with root node)
+  - [x] Search screen (debounced as-you-type, recent chips via /search/history, three-section results, retry-via-nonce)
+  - [ ] Playlist screens (list, detail, create, delete, add/remove tracks)
+  - [ ] WorkManager playlist downloads + Room DB
+  - [ ] WiFi guard (warn before streaming on cellular)
+  - [ ] Migrate Moshi codegen `kapt → ksp` (build warning; non-blocking until Moshi 2.0)
+  - [ ] Build + sign APK, sideload and test
 
 ## Up Next
-- [x] [Search History](prd/search-history.md) — fully implemented and browser-tested
-  - Migration 0005_add_search_history.py applied to production DB
-  - SearchHistory model added to models.py
-  - GET /search/history and POST /search/history implemented (upsert + prune)
-  - SearchHistory component + click recording wired into SearchPage.jsx
-- [x] [Now Playing Page](prd/now-playing-page.md) — implemented this session
-  - `web/src/pages/NowPlayingPage.jsx` — two-column layout: large art, scrubber, ⏮⏪⏯⏩⏭, volume, radio toggle
-  - PlayerContext: `history` state added (most-recent-first, cap 10); `queue` + `queueIndex` exposed
-  - PlayerBar: album art thumbnail (48×48) added, links to `/now-playing`; grid updated to `auto 1fr auto 1fr`
-  - Layout: "Calliope" brand nav link navigates to `/now-playing`
-  - Sections: Played (2 past, oldest-first), Now Playing (animated equalizer), Up Next (2 ahead + "Radio will continue…" slots), Similar (5 tracks via `/tracks/{id}/similar`)
-  - Browser-tested and confirmed working
-- [ ] [Phase 5: Android App](prd/phase5-android.md)
-  - HTTPS now working on dresdengray.com (Let's Encrypt, auto-renewing)
-  - Android app base URL should be https://dresdengray.com/calliope/api/
+- [ ] [Singles & EPs](prd/singles.md) — design done; needs migration 0009, API, AlbumPage type-cycle pill, ArtistPage section
+- [ ] Genre Tagging
+- [ ] Playlist Permissions
+- [ ] Playlist Cards
+- [ ] Vector Expansion
+- [ ] Similarity Weights
 
 ## Later
-- [x] [Similarity Engine](prd/radio-mode.md) — MFCC+chroma feature extraction; pgvector index; separate `indexer` Docker container; radio toggle in PlayerBar
-  - **Deployed and indexing** — migration 0006 applied; all containers running; first index started and running fast (~388+ tracks/few minutes, much faster than estimated)
-  - Music source moved to `/backup/calliope/music` this session
-  - DB image switched to `pgvector/pgvector:pg16` (stock postgres:16 lacks the vector extension)
-  - `/tracks/{id}/similar` works for any track already indexed (404 if not yet)
-- [x] [Web-Based Music Import](prd/web-import.md) — drag-and-drop zip upload page; Bandcamp + Amazon + Qobuz formats; auto-rescan
-  - `api/app/routers/import_music.py` — POST /import/upload; Bandcamp + Amazon + Qobuz format detection + extraction
-  - `web/src/pages/ImportPage.jsx` — drop zone, per-file status rows, upload progress bar, auto-rescan on success
-  - "Import Music" link added to user menu (Layout.jsx)
-  - nginx updated: `client_max_body_size 600M` + `proxy_read_timeout 120s` in `/etc/nginx/default.d/calliope.conf`
-  - Amazon extractor copies cover art (Folder.jpg / any image at album level) in addition to audio files
-  - Upload progress via axios `onUploadProgress` — button shows "Uploading… 42%" + accent progress bar
-  - Qobuz support added: `Artist - Album/NN Title.flac` format detected; FLACs transcoded to MP3 V0 via ffmpeg
-  - ffmpeg added to API Dockerfile (Ubuntu 24.04 apt); `scripts/qobuz_import.py` added as CLI alternative
-- [x] [Dynamic Color Theme](prd/dynamic-theme.md) — accent color extracted from album art via Vibrant.js
-  - `web/src/hooks/useAlbumAccent.js` — Vibrant palette extraction + JS-driven sRGB animation (requestAnimationFrame)
-  - Three dynamic tiers: `--accent` (main, page titles + links), `--accent-hover` (lighter, hover states), `--accent2` (darker, nav logo)
-  - All derived from Vibrant hue at baseL±0.22; guaranteed visible separation regardless of palette content
-  - CSS `@property` + transition approach was scrapped — Chromium uses OKLab for `@property` interpolation which flashes washed-out on big hue shifts
-  - Art elements (`.np-art`, `.player-art-thumb`) got `background: var(--surface2)` — prevents white flash on image load
-- [x] [Compilation Albums](prd/compilations.md) — Various Artists support; Compilations nav page; per-track artist column; "Appears On" on artist pages
-  - `scripts/tag_compilations.py` tags all `Various Artists/` files with `albumartist = "Various Artists"`; run on host with mutagen
-  - Migration `0007_add_track_artist.py` — adds `track_artist` (varchar) + `track_artist_id` (FK→artists) to tracks
-  - Scanner reads `albumartist` tag; uses it for album ownership; populates track_artist when it differs
-  - Scanner bug fixed: `artist_obj` must reset per album_dir (not per artist_dir) or albumartist bleeds across albums
-  - Scanner bug fixed: `upsert_track` now updates `album_id` on existing tracks (was permanently stuck on first-scan value)
-  - `GET /compilations`, `GET /artists/{id}/compilations`, `GET /artists` excludes VA, `GET /albums/{id}` returns track_artist
-  - `CompilationsPage.jsx` at `/compilations`; nav link added; AlbumPage shows Artist column on compilations; ArtistPage "Appears On" section
-  - DB cleanup done: 57 orphan albums deleted, collation warning silenced, `The Lights` artist merged into `Lights` (albumartist tag mismatch), all track_artist_id refs updated
-- [x] [Track Credits](prd/track-credits.md) — many-to-many artist attribution; album_artists + track_credits tables; "Singles, Remixes and Collaborations" section on artist page; retire track_artist_id
-  - Migration 0008 applied to prod
-  - POST/DELETE /albums/{id}/artists, GET/POST/DELETE /tracks/{id}/credits endpoints in credits.py
-  - AlbumPage: per-track credit chips + owner add/remove UI; collapsible Album Credits section
-  - ArtistPage: "Appears On" → "Singles, Remixes and Collaborations"
-  - AuthContext: userId added (persisted in localStorage, fetched via /auth/me after login)
-  - Post-migration manual cleanup done: album_artists rows added for Warehouse Summer, Empress of the Damned, Someone To Forget, Dead End
-- [ ] [Singles & EPs](prd/singles.md) — `album_type` column; Singles & EPs section on ArtistPage with inline play overlay; PATCH /albums/{id}/type owner UI; rename "Appears On"
-- [ ] [Genre Tagging](prd/genre-tagging.md) — album-level chips; Last.fm fetch (per-album + per-artist); similarity suggest; read-only genre preview on Releases cards
-- [x] [Spacebar Play/Pause](prd/spacebar-playback.md) — spacebar toggles playback globally; plays first track on album/artist/playlist pages if nothing loaded
-  - `web/src/hooks/useSpacebarPlayback.js` — global handler (called from Layout) + `useRegisterFirstTrack` for pages
-  - Layout.jsx owns the single listener; AlbumPage/ArtistPage/PlaylistPage register first-track callbacks
-  - `isPlaying` initial state changed from `false` → `null` in PlayerContext to distinguish "nothing loaded" from "paused"
-- [x] [Track Share Links](prd/track-share-links.md) — album page only (playlist deferred to permissions PRD)
-  - `AlbumPage.jsx` — `ShareButton` component: hover-revealed 🔗, builds `?play={id}&note={artist}_{album}` URL, clipboard copy, "Copied!" in-place for 1.5s
-  - Deep link handling: reads `?play=` on load, scrolls row into view, attempts autoplay, shows `▶ Play` inline fallback button
-  - `LoginPage.jsx` — reads `?redirect=` param, navigates there after login instead of hardcoded `/`
-  - `App.jsx` — `RequireAuth` now passes current path+search as `?redirect=` when bouncing unauthenticated users to login
-  - CSS: `.track-row--highlighted`, `.track-share-btn`, `.track-share-tooltip`, `.track-highlight-play-btn`, `.track-actions-group`
-  - `?note=` is slugified `{artist}_{album}` — human-readable, machine-ignored; no track title in slug
-  - Playlist share links deferred — only meaningful after playlist permissions are in place
-- [ ] [Playlist Permissions](prd/playlist-permissions.md) — per-playlist view/edit access control; owner/users/everyone modes; gear panel in playlist detail
-- [ ] [Playlist Cards](prd/playlist-cards.md) — 2×2 quintessential art collage + track preview + genre chips; centroid-based track selection via similarity vectors
-- [ ] [Vector Expansion](prd/vector-expansion.md) — expand feature vector 38→60 dims; adds chroma var, tempo, RMS mean/var, spectral centroid, tonnetz; breaking migration + full re-index; **ship before similarity weights**
-- [ ] [Similarity Weights](prd/similarity-weights.md) — per-user 9-slider UI (0–10) in user menu; applied server-side to numpy pipeline in /similar and radio mode; **depends on vector expansion**
 - [ ] [Phase 6: Polish & Search](prd/phase6-polish.md)

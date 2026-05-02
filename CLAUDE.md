@@ -9,7 +9,7 @@ calliope/
   api/              ← FastAPI (Python), Docker; code baked into image (rebuild required on changes)
   indexer/          ← Similarity engine; separate Docker container
   web/              ← React + Vite; src volume-mounted for HMR (edit on host, instant reload)
-  android/          ← Kotlin + Jetpack Compose (not yet started)
+  android/          ← Kotlin + Jetpack Compose; Phase 5 in progress (auth, library, player, search done)
   nginx/            ← config snippets; deployed at /etc/nginx/default.d/calliope.conf
   scripts/          ← host-side utilities
   prd/              ← one PRD per feature/phase
@@ -125,7 +125,7 @@ Use these when working in a subsystem — each loads its own file context:
 
 See `.todo` for status. Full specs in `prd/`.
 
-Up next: Genre Tagging, Playlist Permissions, Playlist Cards, Vector Expansion, Similarity Weights, Phase 5 Android.
+Up next: Singles & EPs (migration 0009), Genre Tagging, Playlist Permissions, Playlist Cards, Vector Expansion, Similarity Weights. Phase 5 Android is in progress — remaining substeps: playlist screens, WorkManager downloads, WiFi guard, APK signing.
 
 
 ## Development Constraints
