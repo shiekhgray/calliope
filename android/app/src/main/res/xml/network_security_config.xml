@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!--
+        Debug builds only: trust user-installed certificates and allow cleartext.
+        This lets the app connect to a home server with a self-signed cert
+        or over plain HTTP on the local network.
+        Release builds are unaffected and use default Android trust rules.
+    -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+
+    <!-- Allow cleartext (HTTP) in debug for local network testing -->
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
