@@ -24,6 +24,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,7 +37,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
 import com.dresdengray.calliope.data.api.model.AlbumDetail
+import com.dresdengray.calliope.data.api.model.Track
 import com.dresdengray.calliope.playback.PlayerViewModel
+import com.dresdengray.calliope.ui.common.AddToPlaylistSheet
 import com.dresdengray.calliope.ui.common.ErrorBox
 import com.dresdengray.calliope.ui.common.LoadingBox
 import com.dresdengray.calliope.ui.common.TrackRow
@@ -53,6 +58,7 @@ fun AlbumScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val playerState by playerViewModel.uiState.collectAsState()
+    var addToPlaylistTrack: Track? by remember { mutableStateOf(null) }
 
     Scaffold(
         topBar = {
@@ -83,9 +89,17 @@ fun AlbumScreen(
                 album = s.data,
                 onNavigateToArtist = onNavigateToArtist,
                 onPlayTrack = { index -> playerViewModel.playQueue(s.data.tracks, index) },
+                onAddToPlaylist = { track -> addToPlaylistTrack = track },
                 modifier = Modifier.padding(padding)
             )
         }
+    }
+
+    addToPlaylistTrack?.let { track ->
+        AddToPlaylistSheet(
+            track = track,
+            onDismiss = { addToPlaylistTrack = null }
+        )
     }
 }
 
@@ -94,6 +108,7 @@ private fun AlbumContent(
     album: AlbumDetail,
     onNavigateToArtist: (Int) -> Unit,
     onPlayTrack: (Int) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(modifier = modifier.fillMaxSize()) {
@@ -135,7 +150,8 @@ private fun AlbumContent(
         itemsIndexed(album.tracks, key = { _, track -> track.id }) { index, track ->
             TrackRow(
                 track = track,
-                onClick = { onPlayTrack(index) }
+                onClick = { onPlayTrack(index) },
+                onAddToPlaylist = { onAddToPlaylist(track) }
             )
             HorizontalDivider(modifier = Modifier.padding(start = 56.dp))
         }

@@ -21,11 +21,16 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.dresdengray.calliope.data.api.model.Track
 import com.dresdengray.calliope.playback.PlayerViewModel
+import com.dresdengray.calliope.ui.common.AddToPlaylistSheet
 import com.dresdengray.calliope.ui.common.AlbumCard
 import com.dresdengray.calliope.ui.common.ErrorBox
 import com.dresdengray.calliope.ui.common.LoadingBox
@@ -45,6 +50,7 @@ fun ArtistScreen(
     val state by viewModel.state.collectAsState()
     val artistName = (state as? UiState.Success)?.data?.artistName ?: ""
     val playerState by playerViewModel.uiState.collectAsState()
+    var addToPlaylistTrack: Track? by remember { mutableStateOf(null) }
 
     Scaffold(
         topBar = {
@@ -85,9 +91,17 @@ fun ArtistScreen(
                     }
                     playerViewModel.playQueue(enriched, index)
                 },
+                onAddToPlaylist = { track -> addToPlaylistTrack = track },
                 modifier = Modifier.padding(padding)
             )
         }
+    }
+
+    addToPlaylistTrack?.let { track ->
+        AddToPlaylistSheet(
+            track = track,
+            onDismiss = { addToPlaylistTrack = null }
+        )
     }
 }
 
@@ -96,6 +110,7 @@ private fun ArtistContent(
     data: ArtistUiData,
     onNavigateToAlbum: (Int) -> Unit,
     onPlayTrack: (Int) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyVerticalGrid(
@@ -116,7 +131,8 @@ private fun ArtistContent(
                 val index = data.topTracks.indexOf(track)
                 TrackRow(
                     track = track,
-                    onClick = { onPlayTrack(index) }
+                    onClick = { onPlayTrack(index) },
+                    onAddToPlaylist = { onAddToPlaylist(track) }
                 )
                 HorizontalDivider()
             }

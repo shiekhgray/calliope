@@ -27,6 +27,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,6 +41,7 @@ import com.dresdengray.calliope.data.api.model.SearchHistoryEntry
 import com.dresdengray.calliope.data.api.model.SearchResults
 import com.dresdengray.calliope.data.api.model.Track
 import com.dresdengray.calliope.playback.PlayerViewModel
+import com.dresdengray.calliope.ui.common.AddToPlaylistSheet
 import com.dresdengray.calliope.ui.common.AlbumCard
 import com.dresdengray.calliope.ui.common.ErrorBox
 import com.dresdengray.calliope.ui.common.LoadingBox
@@ -55,6 +59,7 @@ fun SearchScreen(
     val query by viewModel.query.collectAsState()
     val results by viewModel.results.collectAsState()
     val history by viewModel.history.collectAsState()
+    var addToPlaylistTrack: Track? by remember { mutableStateOf(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         OutlinedTextField(
@@ -112,9 +117,17 @@ fun SearchScreen(
                 onTrackClick = { track ->
                     viewModel.recordHistory("track", track.id)
                     playerViewModel.playQueue(listOf(track))
-                }
+                },
+                onAddToPlaylist = { track -> addToPlaylistTrack = track }
             )
         }
+    }
+
+    addToPlaylistTrack?.let { track ->
+        AddToPlaylistSheet(
+            track = track,
+            onDismiss = { addToPlaylistTrack = null }
+        )
     }
 }
 
@@ -171,7 +184,8 @@ private fun ResultsList(
     query: String,
     onArtistClick: (Artist) -> Unit,
     onAlbumClick: (Album) -> Unit,
-    onTrackClick: (Track) -> Unit
+    onTrackClick: (Track) -> Unit,
+    onAddToPlaylist: (Track) -> Unit
 ) {
     val empty = results.artists.isEmpty() && results.albums.isEmpty() && results.tracks.isEmpty()
     if (empty) {
@@ -234,7 +248,11 @@ private fun ResultsList(
                 span = { GridItemSpan(maxLineSpan) },
                 key = { "track-${it.id}" }
             ) { track ->
-                TrackRow(track = track, onClick = { onTrackClick(track) })
+                TrackRow(
+                    track = track,
+                    onClick = { onTrackClick(track) },
+                    onAddToPlaylist = { onAddToPlaylist(track) }
+                )
                 HorizontalDivider()
             }
         }

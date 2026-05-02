@@ -5,7 +5,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PlaylistAdd
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,13 +25,15 @@ import com.dresdengray.calliope.data.api.model.Track
 @Composable
 fun TrackRow(
     track: Track,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onAddToPlaylist: (() -> Unit)? = null,
+    onRemove: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(start = 16.dp, end = 4.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Track number
@@ -69,6 +77,28 @@ fun TrackRow(
                     .padding(start = 8.dp)
                     .width(28.dp)
             )
+        }
+
+        if (onAddToPlaylist != null) {
+            IconButton(onClick = onAddToPlaylist, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.PlaylistAdd,
+                    contentDescription = "Add to playlist",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        if (onRemove != null) {
+            IconButton(onClick = onRemove, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Filled.Close,
+                    contentDescription = "Remove",
+                    modifier = Modifier.size(20.dp),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }

@@ -2,14 +2,12 @@ package com.dresdengray.calliope.ui.main
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -20,12 +18,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.dresdengray.calliope.playback.PlayerViewModel
 import com.dresdengray.calliope.ui.library.LibraryScreen
 import com.dresdengray.calliope.ui.player.MiniPlayerBar
+import com.dresdengray.calliope.ui.playlist.PlaylistListScreen
 import com.dresdengray.calliope.ui.search.SearchScreen
 
 private data class NavTab(val label: String, val icon: ImageVector)
@@ -41,6 +39,7 @@ fun MainScreen(
     playerViewModel: PlayerViewModel,
     onNavigateToArtist: (Int) -> Unit,
     onNavigateToAlbum: (Int) -> Unit,
+    onNavigateToPlaylist: (Int) -> Unit,
     onOpenNowPlaying: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -80,15 +79,8 @@ fun MainScreen(
                     onNavigateToArtist = onNavigateToArtist,
                     onNavigateToAlbum = onNavigateToAlbum
                 )
-                2 -> PlaceholderScreen("Playlists")
+                2 -> PlaylistListScreen(onNavigateToPlaylist = onNavigateToPlaylist)
             }
         }
-    }
-}
-
-@Composable
-private fun PlaceholderScreen(name: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        Text("$name coming soon", style = MaterialTheme.typography.bodyLarge)
     }
 }

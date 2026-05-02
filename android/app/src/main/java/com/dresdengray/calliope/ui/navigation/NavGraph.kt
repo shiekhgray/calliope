@@ -13,6 +13,7 @@ import com.dresdengray.calliope.ui.artist.ArtistScreen
 import com.dresdengray.calliope.ui.auth.LoginScreen
 import com.dresdengray.calliope.ui.main.MainScreen
 import com.dresdengray.calliope.ui.player.NowPlayingScreen
+import com.dresdengray.calliope.ui.playlist.PlaylistDetailScreen
 
 @Composable
 fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
@@ -39,6 +40,9 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
                 },
                 onNavigateToAlbum = { albumId ->
                     navController.navigate("album/$albumId")
+                },
+                onNavigateToPlaylist = { playlistId ->
+                    navController.navigate("playlist/$playlistId")
                 },
                 onOpenNowPlaying = {
                     navController.navigate("now-playing")
@@ -82,6 +86,16 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
 
         composable("now-playing") {
             NowPlayingScreen(
+                playerViewModel = playerViewModel,
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = "playlist/{playlistId}",
+            arguments = listOf(navArgument("playlistId") { type = NavType.IntType })
+        ) {
+            PlaylistDetailScreen(
                 playerViewModel = playerViewModel,
                 onNavigateBack = { navController.popBackStack() }
             )
