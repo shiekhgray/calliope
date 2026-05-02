@@ -63,6 +63,7 @@ fun PlaylistDetailScreen(
     val playerState by playerViewModel.uiState.collectAsState()
     val downloadUiState by viewModel.downloadUiState.collectAsState()
     val downloadedTrackIds by viewModel.downloadedTrackIds.collectAsState()
+    val showDownloadWifiWarning by viewModel.showDownloadWifiWarning.collectAsState()
 
     var editMode by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -229,6 +230,24 @@ fun PlaylistDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showDownloadWifiWarning) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDownloadWarning,
+            title = { Text("Mobile data") },
+            text = { Text("You're on mobile data. Downloading this playlist will use your cellular data.") },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmDownloadOnCellular) {
+                    Text("Download anyway")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDownloadWarning) {
+                    Text("Cancel")
+                }
             }
         )
     }

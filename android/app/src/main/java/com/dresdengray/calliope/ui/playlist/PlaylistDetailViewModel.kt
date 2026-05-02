@@ -13,6 +13,7 @@ import com.dresdengray.calliope.data.api.model.ReorderRequest
 import com.dresdengray.calliope.data.db.DownloadStatus
 import com.dresdengray.calliope.data.db.DownloadedTrackDao
 import com.dresdengray.calliope.ui.common.UiState
+import com.dresdengray.calliope.util.NetworkMonitor
 import com.dresdengray.calliope.work.DownloadPlaylistWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,9 +39,14 @@ class PlaylistDetailViewModel @Inject constructor(
     private val api: CalliopeApi,
     private val dao: DownloadedTrackDao,
     private val workManager: WorkManager,
+    private val networkMonitor: NetworkMonitor,
     @ApplicationContext private val appContext: Context,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+
+    // WiFi guard for downloads — session-scoped
+    private var downloadWifiConfirmed = false
+    val showDownloadWifiWarning = MutableStateFlow(false)
 
     private val playlistId: Int = checkNotNull(savedStateHandle["playlistId"])
 
@@ -88,6 +94,24 @@ class PlaylistDetailViewModel @Inject constructor(
     }
 
     fun startDownload() {
+        if (networkMonitor.isOnWifi() || downloadWifiConfirmed) {
+            enqueueDownload()
+        } else {
+            showDownloadWifiWarning.value = true
+        }
+    }
+
+    fun confirmDownloadOnCellular() {
+        downloadWifiConfirmed = true
+        showDownloadWifiWarning.value = false
+        enqueueDownload()
+    }
+
+    fun dismissDownloadWarning() {
+        showDownloadWifiWarning.value = false
+    }
+
+    private fun enqueueDownload() {
         val request = DownloadPlaylistWorker.buildRequest(playlistId.toLong())
         workManager.enqueueUniqueWork(
             "download_playlist_$playlistId",

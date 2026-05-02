@@ -14,6 +14,7 @@ import androidx.media3.session.SessionToken
 import com.dresdengray.calliope.data.api.model.Track
 import com.dresdengray.calliope.data.db.DownloadedTrackDao
 import com.dresdengray.calliope.util.Constants
+import com.dresdengray.calliope.util.NetworkMonitor
 import java.io.File
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
@@ -41,11 +42,17 @@ data class PlayerUiState(
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val downloadedTrackDao: DownloadedTrackDao
+    private val downloadedTrackDao: DownloadedTrackDao,
+    private val networkMonitor: NetworkMonitor
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    // WiFi guard — session-scoped, cleared when ViewModel is destroyed
+    private var wifiGuardConfirmed = false
+    private var pendingPlay: Pair<List<Track>, Int>? = null
+    val showStreamingWifiWarning = MutableStateFlow(false)
 
     private var mediaController: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
@@ -120,8 +127,29 @@ class PlayerViewModel @Inject constructor(
         if (controller.isPlaying) startPositionUpdates()
     }
 
-    /** Play a list of tracks, starting at [startIndex]. Prefers local downloaded file if available. */
+    /** Play a list of tracks, starting at [startIndex]. Shows a WiFi warning if on cellular. */
     fun playQueue(tracks: List<Track>, startIndex: Int = 0) {
+        if (networkMonitor.isOnWifi() || wifiGuardConfirmed) {
+            executePlay(tracks, startIndex)
+        } else {
+            pendingPlay = tracks to startIndex
+            showStreamingWifiWarning.value = true
+        }
+    }
+
+    fun confirmStreamingOnCellular() {
+        wifiGuardConfirmed = true
+        showStreamingWifiWarning.value = false
+        pendingPlay?.let { (tracks, index) -> executePlay(tracks, index) }
+        pendingPlay = null
+    }
+
+    fun dismissStreamingWarning() {
+        showStreamingWifiWarning.value = false
+        pendingPlay = null
+    }
+
+    private fun executePlay(tracks: List<Track>, startIndex: Int) {
         _queueTracks.clear()
         _queueTracks.addAll(tracks)
         _uiState.update {
