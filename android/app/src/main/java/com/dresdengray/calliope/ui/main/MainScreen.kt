@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import com.dresdengray.calliope.playback.PlayerViewModel
 import com.dresdengray.calliope.ui.library.LibraryScreen
 import com.dresdengray.calliope.ui.player.MiniPlayerBar
+import com.dresdengray.calliope.ui.search.SearchScreen
 
 private data class NavTab(val label: String, val icon: ImageVector)
 
@@ -39,6 +40,7 @@ private val tabs = listOf(
 fun MainScreen(
     playerViewModel: PlayerViewModel,
     onNavigateToArtist: (Int) -> Unit,
+    onNavigateToAlbum: (Int) -> Unit,
     onOpenNowPlaying: () -> Unit,
     onLogout: () -> Unit
 ) {
@@ -73,7 +75,11 @@ fun MainScreen(
         Box(modifier = Modifier.padding(padding)) {
             when (selectedTab) {
                 0 -> LibraryScreen(onNavigateToArtist = onNavigateToArtist)
-                1 -> PlaceholderScreen("Search")
+                1 -> SearchScreen(
+                    playerViewModel = playerViewModel,
+                    onNavigateToArtist = onNavigateToArtist,
+                    onNavigateToAlbum = onNavigateToAlbum
+                )
                 2 -> PlaceholderScreen("Playlists")
             }
         }

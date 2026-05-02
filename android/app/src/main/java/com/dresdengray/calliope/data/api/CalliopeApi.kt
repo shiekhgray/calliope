@@ -9,6 +9,9 @@ import com.dresdengray.calliope.data.api.model.MeResponse
 import com.dresdengray.calliope.data.api.model.RefreshRequest
 import com.dresdengray.calliope.data.api.model.RefreshResponse
 import com.dresdengray.calliope.data.api.model.PlayedResponse
+import com.dresdengray.calliope.data.api.model.SearchHistoryEntry
+import com.dresdengray.calliope.data.api.model.SearchHistoryRequest
+import com.dresdengray.calliope.data.api.model.SearchResults
 import com.dresdengray.calliope.data.api.model.Track
 import retrofit2.http.Body
 import retrofit2.http.Field
@@ -16,6 +19,7 @@ import retrofit2.http.FormUrlEncoded
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 interface CalliopeApi {
 
@@ -49,4 +53,14 @@ interface CalliopeApi {
     // Playback
     @POST("tracks/{id}/played")
     suspend fun reportPlayed(@Path("id") trackId: Int): PlayedResponse
+
+    // Search
+    @GET("search")
+    suspend fun search(@Query("q") q: String): SearchResults
+
+    @GET("search/history")
+    suspend fun getSearchHistory(): List<SearchHistoryEntry>
+
+    @POST("search/history")
+    suspend fun recordSearchHistory(@Body body: SearchHistoryRequest)
 }

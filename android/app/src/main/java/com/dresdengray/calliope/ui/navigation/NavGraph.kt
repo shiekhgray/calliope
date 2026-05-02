@@ -37,6 +37,9 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
                 onNavigateToArtist = { artistId ->
                     navController.navigate("artist/$artistId")
                 },
+                onNavigateToAlbum = { albumId ->
+                    navController.navigate("album/$albumId")
+                },
                 onOpenNowPlaying = {
                     navController.navigate("now-playing")
                 },
