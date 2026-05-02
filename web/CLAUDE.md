@@ -8,7 +8,7 @@ React + Vite. Runs as Docker container. `./web/src` is volume-mounted — edit o
 web/src/
   api/client.js             ← axios; Bearer token; auto-refresh on 401; baseURL = '/calliope/api'
   auth/
-    AuthContext.jsx          ← loggedIn, username, login(), logout(); username in localStorage
+    AuthContext.jsx          ← loggedIn, username, userId, login(), logout(); username + user_id in localStorage; userId fetched via /auth/me after login
     LoginPage.jsx            ← reads ?redirect= param, navigates there after login
   hooks/
     useAlbumAccent.js        ← Vibrant palette → 3 CSS var tiers; JS sRGB animation
@@ -107,3 +107,4 @@ URL format: `{origin}/calliope/albums/{id}?play={trackId}&note={artist}_{album}`
 | `['discoveries', 'artist', id]` | Scoped to one artist |
 | `['search-history']` | Current user's 10 most recent visits |
 | `['scanner-status']` | Polled every 2s during rescan |
+| `['album-artists', albumId]` | Album-level credits — fetched eagerly on every AlbumPage load (after album data arrives); also used by AlbumCreditsSection (owner-only). React Query deduplicates both callers. |

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -19,6 +20,23 @@ def get_album(album_id: int, db: Session = Depends(get_db)):
     album = db.get(models.Album, album_id)
     if not album:
         raise HTTPException(status_code=404)
+
+    # Fetch all track credits for this album in one query
+    credit_rows = db.execute(text("""
+        SELECT tc.track_id, tc.artist_id, ar.name AS artist_name
+        FROM track_credits tc
+        JOIN artists ar ON ar.id = tc.artist_id
+        WHERE tc.track_id IN (
+            SELECT id FROM tracks WHERE album_id = :album_id
+        )
+    """), {"album_id": album_id}).fetchall()
+
+    credits_by_track: dict[int, list[dict]] = {}
+    for row in credit_rows:
+        credits_by_track.setdefault(row.track_id, []).append(
+            {"artist_id": row.artist_id, "artist_name": row.artist_name}
+        )
+
     return {
         "id": album.id,
         "title": album.title,
@@ -35,8 +53,7 @@ def get_album(album_id: int, db: Session = Depends(get_db)):
                 "bitrate_kbps": t.bitrate_kbps,
                 "format": t.format,
                 "play_count": t.play_count,
-                "track_artist": t.track_artist,
-                "track_artist_id": t.track_artist_id,
+                "credits": credits_by_track.get(t.id, []),
             }
             for t in album.tracks
         ],

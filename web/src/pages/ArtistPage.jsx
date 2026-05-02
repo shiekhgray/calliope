@@ -105,7 +105,7 @@ export default function ArtistPage() {
 
       {compilations.length > 0 && (
         <section style={{ marginTop: '36px' }}>
-          <h3 className="section-heading">Appears On</h3>
+          <h3 className="section-heading">Singles, Remixes and Collaborations</h3>
           <div className="album-grid">
             {compilations.map((album) => (
               <Link key={album.id} to={`/albums/${album.id}`} className="album-card">

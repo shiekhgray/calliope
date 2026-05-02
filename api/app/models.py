@@ -44,6 +44,20 @@ class Album(Base):
     __table_args__ = (UniqueConstraint("artist_id", "title"),)
 
 
+class AlbumArtist(Base):
+    __tablename__ = "album_artists"
+
+    album_id = Column(Integer, ForeignKey("albums.id", ondelete="CASCADE"), primary_key=True)
+    artist_id = Column(Integer, ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True)
+
+
+class TrackCredit(Base):
+    __tablename__ = "track_credits"
+
+    track_id = Column(Integer, ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True)
+    artist_id = Column(Integer, ForeignKey("artists.id", ondelete="CASCADE"), primary_key=True)
+
+
 class Track(Base):
     __tablename__ = "tracks"
 
@@ -56,11 +70,8 @@ class Track(Base):
     file_path = Column(Text, unique=True, nullable=False)
     format = Column(String(8), nullable=False)
     play_count = Column(Integer, nullable=False, default=0)
-    track_artist = Column(String(255), nullable=True)
-    track_artist_id = Column(Integer, ForeignKey("artists.id"), nullable=True)
 
     album = relationship("Album", back_populates="tracks")
-    track_artist_obj = relationship("Artist", foreign_keys=[track_artist_id])
     genres = relationship("Genre", secondary="track_genres", back_populates="tracks")
     playlist_entries = relationship("PlaylistTrack", back_populates="track")
 

@@ -59,7 +59,14 @@
   - `GET /compilations`, `GET /artists/{id}/compilations`, `GET /artists` excludes VA, `GET /albums/{id}` returns track_artist
   - `CompilationsPage.jsx` at `/compilations`; nav link added; AlbumPage shows Artist column on compilations; ArtistPage "Appears On" section
   - DB cleanup done: 57 orphan albums deleted, collation warning silenced, `The Lights` artist merged into `Lights` (albumartist tag mismatch), all track_artist_id refs updated
-- [ ] [Track Credits](prd/track-credits.md) — many-to-many artist attribution; album_artists + track_credits tables; "Singles, Remixes and Collaborations" section on artist page; retire track_artist_id
+- [x] [Track Credits](prd/track-credits.md) — many-to-many artist attribution; album_artists + track_credits tables; "Singles, Remixes and Collaborations" section on artist page; retire track_artist_id
+  - Migration 0008 applied to prod
+  - POST/DELETE /albums/{id}/artists, GET/POST/DELETE /tracks/{id}/credits endpoints in credits.py
+  - AlbumPage: per-track credit chips + owner add/remove UI; collapsible Album Credits section
+  - ArtistPage: "Appears On" → "Singles, Remixes and Collaborations"
+  - AuthContext: userId added (persisted in localStorage, fetched via /auth/me after login)
+  - Post-migration manual cleanup done: album_artists rows added for Warehouse Summer, Empress of the Damned, Someone To Forget, Dead End
+- [ ] [Singles & EPs](prd/singles.md) — `album_type` column; Singles & EPs section on ArtistPage with inline play overlay; PATCH /albums/{id}/type owner UI; rename "Appears On"
 - [ ] [Genre Tagging](prd/genre-tagging.md) — album-level chips; Last.fm fetch (per-album + per-artist); similarity suggest; read-only genre preview on Releases cards
 - [x] [Spacebar Play/Pause](prd/spacebar-playback.md) — spacebar toggles playback globally; plays first track on album/artist/playlist pages if nothing loaded
   - `web/src/hooks/useSpacebarPlayback.js` — global handler (called from Layout) + `useRegisterFirstTrack` for pages

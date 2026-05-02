@@ -183,6 +183,14 @@ def upsert_album(
             album.year = year
         if cover_art_path and not album.cover_art_path:
             album.cover_art_path = cover_art_path
+
+    # Ensure album_artists row exists (idempotent — new albums won't have one yet)
+    exists = db.query(models.AlbumArtist).filter_by(
+        album_id=album.id, artist_id=artist.id
+    ).first()
+    if not exists:
+        db.add(models.AlbumArtist(album_id=album.id, artist_id=artist.id))
+
     return album
 
 
@@ -192,8 +200,6 @@ def upsert_track(
     tags: dict,
     file_path_rel: str,
     fmt: str,
-    track_artist: str | None = None,
-    track_artist_id: int | None = None,
 ) -> models.Track:
     track = db.query(models.Track).filter_by(file_path=file_path_rel).first()
     if not track:
@@ -205,8 +211,6 @@ def upsert_track(
             bitrate_kbps=tags["bitrate_kbps"],
             file_path=file_path_rel,
             format=fmt,
-            track_artist=track_artist,
-            track_artist_id=track_artist_id,
         )
         db.add(track)
         db.flush()
@@ -216,8 +220,6 @@ def upsert_track(
         track.track_number = tags["track_number"]
         track.duration_ms = tags["duration_ms"]
         track.bitrate_kbps = tags["bitrate_kbps"]
-        track.track_artist = track_artist
-        track.track_artist_id = track_artist_id
     return track
 
 
@@ -293,15 +295,7 @@ def scan(music_root: Path):
                         )
                         counts["albums"] += 1
 
-                    # For compilation tracks, store per-track artist separately
-                    track_artist = None
-                    track_artist_id = None
-                    if tags["albumartist"] and tags["artist"] and tags["albumartist"] != tags["artist"]:
-                        track_artist = tags["artist"]
-                        track_artist_obj = upsert_artist(db, tags["artist"])
-                        track_artist_id = track_artist_obj.id
-
-                    track_obj = upsert_track(db, album_obj, tags, file_path_rel, fmt, track_artist, track_artist_id)
+                    track_obj = upsert_track(db, album_obj, tags, file_path_rel, fmt)
                     upsert_genres(db, track_obj, tags["genres"])
                     counts["tracks"] += 1
 

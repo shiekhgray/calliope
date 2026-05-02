@@ -11,14 +11,19 @@ export function AuthProvider({ children }) {
   const [username, setUsername] = useState(
     () => localStorage.getItem('username') ?? ''
   )
+  const [userId, setUserId] = useState(
+    () => localStorage.getItem('user_id') ? Number(localStorage.getItem('user_id')) : null
+  )
 
-  // Recover username for existing sessions that pre-date username storage
+  // Recover username/userId for existing sessions that pre-date this storage
   useEffect(() => {
-    if (loggedIn && !username) {
+    if (loggedIn && (!username || !userId)) {
       api.get('/auth/me')
         .then(({ data }) => {
           localStorage.setItem('username', data.username)
+          localStorage.setItem('user_id', String(data.id))
           setUsername(data.username)
+          setUserId(data.id)
         })
         .catch(() => {})
     }
@@ -32,18 +37,26 @@ export function AuthProvider({ children }) {
     localStorage.setItem('username', user)
     setUsername(user)
     setLoggedIn(true)
+    // Fetch user id after login
+    try {
+      const me = await api.get('/auth/me')
+      localStorage.setItem('user_id', String(me.data.id))
+      setUserId(me.data.id)
+    } catch {}
   }
 
   function logout() {
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('username')
+    localStorage.removeItem('user_id')
     setUsername('')
+    setUserId(null)
     setLoggedIn(false)
   }
 
   return (
-    <AuthContext.Provider value={{ loggedIn, username, login, logout }}>
+    <AuthContext.Provider value={{ loggedIn, username, userId, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

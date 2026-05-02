@@ -21,6 +21,7 @@ docker compose exec api alembic upgrade head
 | `discover.py` | POST /discover/refresh, GET /discover/status, GET /discover(?artist_id=), POST /discover/{id}/dismiss |
 | `compilations.py` | GET /compilations |
 | `import_music.py` | POST /import/upload (auth; Bandcamp + Amazon zip detection + extraction) |
+| `credits.py` | GET /albums/{id}/artists, POST /albums/{id}/artists, DELETE /albums/{id}/artists/{artist_id}, POST /tracks/{id}/credits, DELETE /tracks/{id}/credits/{artist_id} — all mutating endpoints owner-only (user_id == 1) |
 
 ## Auth (`api/app/auth.py`)
 
@@ -35,13 +36,13 @@ Walks `Artist/Album/Track`. Fully idempotent. Never touches `play_count`.
 **Critical invariants:**
 - `artist_obj` resets per `album_dir` (not per `artist_dir`). If it only reset per artist_dir, a VA album with a non-"Various Artists" `albumartist` tag would corrupt `artist_obj` for subsequent albums in the same artist directory.
 - `upsert_track` updates `album_id` on existing tracks. Without this, a track misassigned on first scan can never be corrected by a rescan.
-- Compilation support: reads `albumartist` tag (EasyID3: `albumartist`, EasyMP4: `aART`). If set, uses it as the album's owning artist. When `albumartist != artist`, stores `track_artist` (name) + `track_artist_id` (FK) on the track.
+- Compilation support: reads `albumartist` tag (EasyID3: `albumartist`, EasyMP4: `aART`). If set, uses it as the album's owning artist. The scanner no longer writes `track_artist`/`track_artist_id` — those columns were dropped in migration 0008. Credits are managed manually via the credits API.
 
 Script must live at `api/scripts/scan.py` (inside the Docker build context). Moving it outside `api/` causes "No such file or directory" at runtime.
 
 ## Migrations
 
-Applied: **0001–0007**. Next number: **0008**.
+Applied: **0001–0008**. Next number: **0009**.
 
 | File | Change |
 |---|---|
@@ -52,7 +53,7 @@ Applied: **0001–0007**. Next number: **0008**.
 | 0005_add_search_history | `search_history` table + index |
 | 0006_add_pgvector | vector extension, `track_vectors`, `vector_norm_params`, HNSW index |
 | 0007_add_track_artist | `track_artist` + `track_artist_id` on `tracks` |
-| 0008_track_credits *(planned)* | `album_artists (album_id, artist_id)`, `track_credits (track_id, artist_id)`; backfill from `track_artist_id`; drop `track_artist` + `track_artist_id` |
+| 0008_track_credits | `album_artists (album_id, artist_id)`, `track_credits (track_id, artist_id)`; backfill from existing `track_artist_id`; drop `track_artist` + `track_artist_id` |
 
 Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overridden at runtime via `env.py`. Do not add a value there.
 

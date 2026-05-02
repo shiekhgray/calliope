@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -11,12 +11,21 @@ router = APIRouter(prefix="/artists", tags=["artists"])
 
 @router.get("")
 def list_artists(db: Session = Depends(get_db)):
-    return (
-        db.query(models.Artist)
-        .filter(models.Artist.name != "Various Artists")
-        .order_by(models.Artist.name)
-        .all()
-    )
+    rows = db.execute(text("""
+        SELECT DISTINCT ar.id, ar.name
+        FROM artists ar
+        WHERE ar.name != 'Various Artists'
+          AND (
+            EXISTS (SELECT 1 FROM album_artists aa WHERE aa.artist_id = ar.id)
+            OR EXISTS (
+              SELECT 1 FROM albums al
+              WHERE al.artist_id = ar.id
+                AND NOT EXISTS (SELECT 1 FROM album_artists aa2 WHERE aa2.album_id = al.id)
+            )
+          )
+        ORDER BY ar.name
+    """)).fetchall()
+    return [{"id": row.id, "name": row.name} for row in rows]
 
 
 @router.get("/{artist_id}/albums")
@@ -24,22 +33,24 @@ def list_albums(artist_id: int, db: Session = Depends(get_db)):
     artist = db.get(models.Artist, artist_id)
     if not artist:
         raise HTTPException(status_code=404)
-    albums = (
-        db.query(models.Album)
-        .filter(models.Album.artist_id == artist_id)
-        .order_by(models.Album.year, models.Album.title)
-        .all()
-    )
+    rows = db.execute(text("""
+        SELECT DISTINCT al.id, al.title, al.year, al.cover_art_path, al.artist_id, ar2.name AS artist_name
+        FROM albums al
+        JOIN album_artists aa ON aa.album_id = al.id
+        JOIN artists ar2 ON ar2.id = al.artist_id
+        WHERE aa.artist_id = :artist_id
+        ORDER BY al.year, al.title
+    """), {"artist_id": artist_id}).fetchall()
     return [
         {
-            "id": a.id,
-            "title": a.title,
-            "year": a.year,
-            "cover_art_path": a.cover_art_path,
-            "artist_id": a.artist_id,
-            "artist_name": artist.name,
+            "id": row.id,
+            "title": row.title,
+            "year": row.year,
+            "cover_art_path": row.cover_art_path,
+            "artist_id": row.artist_id,
+            "artist_name": row.artist_name,
         }
-        for a in albums
+        for row in rows
     ]
 
 
@@ -48,30 +59,27 @@ def list_artist_compilations(artist_id: int, db: Session = Depends(get_db)):
     artist = db.get(models.Artist, artist_id)
     if not artist:
         raise HTTPException(status_code=404)
-    va = db.query(models.Artist).filter_by(name="Various Artists").first()
-    if not va:
-        return []
-    albums = (
-        db.query(models.Album)
-        .join(models.Track, models.Track.album_id == models.Album.id)
-        .filter(
-            models.Album.artist_id == va.id,
-            models.Track.track_artist_id == artist_id,
-        )
-        .distinct()
-        .order_by(models.Album.year, models.Album.title)
-        .all()
-    )
+    rows = db.execute(text("""
+        SELECT DISTINCT al.id, al.title, al.year, al.cover_art_path, al.artist_id
+        FROM albums al
+        JOIN tracks t ON t.album_id = al.id
+        JOIN track_credits tc ON tc.track_id = t.id
+        WHERE tc.artist_id = :artist_id
+          AND NOT EXISTS (
+            SELECT 1 FROM album_artists aa
+            WHERE aa.album_id = al.id AND aa.artist_id = :artist_id
+          )
+        ORDER BY al.year, al.title
+    """), {"artist_id": artist_id}).fetchall()
     return [
         {
-            "id": a.id,
-            "title": a.title,
-            "year": a.year,
-            "cover_art_path": a.cover_art_path,
-            "artist_id": va.id,
-            "artist_name": va.name,
+            "id": row.id,
+            "title": row.title,
+            "year": row.year,
+            "cover_art_path": row.cover_art_path,
+            "artist_id": row.artist_id,
         }
-        for a in albums
+        for row in rows
     ]
 
 

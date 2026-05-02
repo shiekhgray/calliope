@@ -36,7 +36,7 @@ calliope/
 
 - **Music files**: `/backup/calliope/music/` — mounted **read-write** (album art upload writes `Folder.jpg`)
 - **Public URL**: `https://dresdengray.com/calliope/` — HTTPS via Let's Encrypt, auto-renewing
-- **Migrations**: run manually — `docker compose exec api alembic upgrade head` — applied 0001–0007
+- **Migrations**: run manually — `docker compose exec api alembic upgrade head` — applied 0001–0008
 - **API changes**: require `docker compose build api && docker compose up -d api` (code baked into image)
 - **nginx config**: `/etc/nginx/default.d/calliope.conf`. Apply: `sudo nginx -s reload`
 - **Docker**: use `docker compose` (v2 plugin). `version:` header in compose file is obsolete — harmless.
@@ -75,9 +75,11 @@ users              id, username, password_hash
 artists            id, name
 albums             id, artist_id, title, year, cover_art_path
 tracks             id, album_id, title, track_number, duration_ms, bitrate_kbps, file_path, format,
-                   play_count, track_artist (varchar nullable), track_artist_id (FK→artists nullable)
+                   play_count
 genres             id, name
 track_genres       track_id, genre_id
+album_artists      album_id (FK→albums), artist_id (FK→artists) — composite PK; primary album credits
+track_credits      track_id (FK→tracks), artist_id (FK→artists) — composite PK; featured/guest credits
 playlists          id, owner_id, title, description, created_at
 playlist_tracks    id, playlist_id, track_id, position
 discoveries        id, artist_id, itunes_collection_id (unique bigint), album_title, release_date,
@@ -90,8 +92,9 @@ vector_norm_params id (always 1), means float[38], stds float[38], updated_at
 
 - `cover_art_path` is relative from music root; served via API (no direct filesystem exposure)
 - `play_count` — scanner never touches it; rescan is always safe
-- `track_artist` / `track_artist_id` — set on compilation tracks; NULL on normal tracks. **Planned retirement**: migration 0008 (`track-credits` PRD) will replace both with `track_credits (track_id, artist_id)` + `album_artists (album_id, artist_id)`.
-- `GET /artists` excludes "Various Artists" (kept in DB, filtered at query time)
+- `album.artist_id` — kept as the display label for album cards (scanner writes from albumartist tag). Attribution for artist pages is driven by `album_artists`; `album.artist_id` is display-only.
+- `album_artists` / `track_credits` — added by migration 0008. `track_artist` and `track_artist_id` columns were dropped.
+- `GET /artists` — shows artists with at least one `album_artists` row OR at least one album with no `album_artists` rows at all. Combined-credit ghost entries ("i_o & Lights") disappear automatically once their albums are claimed via `album_artists`.
 
 ## Non-Obvious Rules
 
@@ -123,6 +126,7 @@ Use these when working in a subsystem — each loads its own file context:
 See `.todo` for status. Full specs in `prd/`.
 
 Up next: Genre Tagging, Playlist Permissions, Playlist Cards, Vector Expansion, Similarity Weights, Phase 5 Android.
+
 
 ## Development Constraints
 
