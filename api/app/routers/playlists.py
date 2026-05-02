@@ -41,6 +41,7 @@ def get_playlist(playlist_id: int, db: Session = Depends(get_db)):
         "id": pl.id,
         "title": pl.title,
         "description": pl.description,
+        "owner_id": pl.owner_id,
         "created_at": pl.created_at,
         "entries": [
             {
