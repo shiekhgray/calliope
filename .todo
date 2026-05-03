@@ -33,7 +33,10 @@
   - [x] Playlist screens (list, detail, create, delete, add/remove tracks, reorder, "add to playlist" sheet from album/artist/search)
   - [x] WorkManager playlist downloads + Room DB
   - [x] WiFi guard (warn before streaming on cellular)
+  - [x] Similar tracks section + Radio mode on NowPlayingScreen
   - [ ] Migrate Moshi codegen `kapt → ksp` (build warning; non-blocking until Moshi 2.0)
+        Note: project already uses ksp(libs.moshi.codegen); Hilt Java AP still emits warning — truly non-blocking
+  - [ ] Rebase worktree onto master before release (worktree was branched at 0d89ba8, missing WiFi guard + build fix)
   - [ ] Build + sign APK, sideload and test
 
 ## Up Next

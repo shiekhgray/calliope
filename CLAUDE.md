@@ -9,7 +9,7 @@ calliope/
   api/              ← FastAPI (Python), Docker; code baked into image (rebuild required on changes)
   indexer/          ← Similarity engine; separate Docker container
   web/              ← React + Vite; src volume-mounted for HMR (edit on host, instant reload)
-  android/          ← Kotlin + Jetpack Compose; Phase 5 in progress (auth, library, player, search done)
+  android/          ← Kotlin + Jetpack Compose; Phase 5 nearly complete (auth, library, player, search, playlists, downloads, WiFi guard, similar tracks, radio mode done — APK signing remaining)
   nginx/            ← config snippets; deployed at /etc/nginx/default.d/calliope.conf
   scripts/          ← host-side utilities
   prd/              ← one PRD per feature/phase
@@ -42,6 +42,7 @@ calliope/
 - **Docker**: use `docker compose` (v2 plugin). `version:` header in compose file is obsolete — harmless.
 - **Docker storage driver**: `/etc/docker/daemon.json` sets `overlay2` — do not remove (devicemapper legacy)
 - **Node.js on host**: system install is v14; use `nvm use 22`. Docker uses `node:22-slim` (unaffected).
+- **Android builds (Windows)**: `JAVA_HOME` must point to Android Studio's bundled JRE — `/c/Program Files/Android/Android Studio/jbr`. Run: `JAVA_HOME="..." ./gradlew assembleDebug`. SDK at `C:\Users\shiek\AppData\Local\Android\Sdk`. `android/local.properties` must exist with `sdk.dir=C\:\\Users\\shiek\\AppData\\Local\\Android\\Sdk`.
 
 ## Users
 
