@@ -98,14 +98,11 @@ Auto displays custom layout buttons on the Now Playing card. Tapping toggles `ra
 
 ## API Changes
 
-Two new endpoints needed (or verify they already exist):
-
-| Endpoint | Used for |
-|----------|----------|
-| `GET /artists/{id}/tracks?sort=play_count&limit=N` | Top Tracks folder |
-| `GET /tracks?sort=play_count&limit=N` | Recently Played folder |
-
-Both return the standard track shape already used elsewhere. The similarity endpoint (`GET /tracks/{id}/similar`) already exists.
+| Endpoint | Status | Notes |
+|----------|--------|-------|
+| `GET /artists/{id}/top-tracks` | **exists** | Used for Top Tracks folder. Limit hardcoded to 10 — bump to 25 for Auto. Also uses `albums.artist_id` filter rather than the `album_artists` join, so tracks on albums where the artist is credited via `album_artists` (but isn't the display `artist_id`) are missed. Fix the join to match `GET /artists/{id}/albums` when implementing Auto. |
+| `GET /tracks?sort=play_count&limit=N` | **needs adding** | Used for Recently Played folder. Returns standard track shape (id, title, album_id, album_title, artist_id, artist_name, play_count, duration_ms, format). |
+| `GET /tracks/{id}/similar` | **exists** | Used for radio queue extension. No changes needed. |
 
 ## Implementation Notes
 
@@ -149,7 +146,8 @@ When building `MediaItem` for a track, check `DownloadedTrackDao.findDoneByTrack
 ## Task Breakdown
 
 - [ ] Add `kotlinx-coroutines-guava` dependency
-- [ ] Add API endpoints: `GET /artists/{id}/tracks` and `GET /tracks?sort=play_count`
+- [ ] Add `GET /tracks?sort=play_count&limit=N` endpoint (Recently Played)
+- [ ] Fix `GET /artists/{id}/top-tracks` — bump limit to 25, fix join to use `album_artists` instead of `albums.artist_id`
 - [ ] Implement `onGetChildren` for all node types in `MusicService.libraryCallback`
 - [ ] Implement `onGetItem` (needed for Auto to resolve individual track metadata)
 - [ ] Queue building on `onPlayFromMediaId` — load siblings, call `player.setMediaItems`
