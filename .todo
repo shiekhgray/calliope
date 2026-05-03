@@ -36,8 +36,10 @@
   - [x] Similar tracks section + Radio mode on NowPlayingScreen
   - [ ] Migrate Moshi codegen `kapt → ksp` (build warning; non-blocking until Moshi 2.0)
         Note: project already uses ksp(libs.moshi.codegen); Hilt Java AP still emits warning — truly non-blocking
-  - [ ] Rebase worktree onto master before release (worktree was branched at 0d89ba8, missing WiFi guard + build fix)
+  - [x] Rebase worktree onto master before release (merged via PR #1)
   - [ ] Build + sign APK, sideload and test
+        Note: generate keystore manually with keytool; store creds in local.properties (not git);
+        add signingConfigs block to app/build.gradle.kts; run ./gradlew assembleRelease
 
 ## Up Next
 - [ ] [Singles & EPs](prd/singles.md) — design done; needs migration 0009, API, AlbumPage type-cycle pill, ArtistPage section
@@ -48,4 +50,5 @@
 - [ ] Similarity Weights
 
 ## Later
+- [ ] [Android Auto](prd/android-auto.md) — full browse tree, radio mode, offline playback
 - [ ] [Phase 6: Polish & Search](prd/phase6-polish.md)

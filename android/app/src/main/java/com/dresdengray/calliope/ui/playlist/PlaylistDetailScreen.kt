@@ -57,6 +57,7 @@ import com.dresdengray.calliope.ui.player.MiniPlayerBar
 fun PlaylistDetailScreen(
     playerViewModel: PlayerViewModel,
     onNavigateBack: () -> Unit,
+    onOpenNowPlaying: () -> Unit,
     viewModel: PlaylistDetailViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -153,7 +154,7 @@ fun PlaylistDetailScreen(
                 MiniPlayerBar(
                     uiState = playerState,
                     onTogglePlayPause = playerViewModel::togglePlayPause,
-                    onTap = { /* no nav to now-playing from here; user can tap mini-bar on main screen */ },
+                    onTap = onOpenNowPlaying,
                     modifier = Modifier.navigationBarsPadding()
                 )
             }

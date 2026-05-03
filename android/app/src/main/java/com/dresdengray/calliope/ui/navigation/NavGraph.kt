@@ -103,7 +103,8 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
         ) {
             PlaylistDetailScreen(
                 playerViewModel = playerViewModel,
-                onNavigateBack = { navController.popBackStack() }
+                onNavigateBack = { navController.popBackStack() },
+                onOpenNowPlaying = { navController.navigate("now-playing") }
             )
         }
     }
