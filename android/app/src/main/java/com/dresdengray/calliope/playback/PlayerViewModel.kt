@@ -140,13 +140,19 @@ class PlayerViewModel @Inject constructor(
         track?.let { fetchSimilarTracks(it.id) }
     }
 
-    /** Play a list of tracks, starting at [startIndex]. Shows a WiFi warning if on cellular. */
+    /** Play a list of tracks, starting at [startIndex]. Shows a WiFi warning if on cellular and any track needs streaming. */
     fun playQueue(tracks: List<Track>, startIndex: Int = 0) {
-        if (networkMonitor.isOnWifi() || wifiGuardConfirmed) {
-            executePlay(tracks, startIndex)
-        } else {
-            pendingPlay = tracks to startIndex
-            showStreamingWifiWarning.value = true
+        viewModelScope.launch {
+            val allLocal = tracks.all { track ->
+                val local = downloadedTrackDao.findDoneByTrackId(track.id.toLong())
+                local?.filePath?.let { File(it).exists() } == true
+            }
+            if (allLocal || networkMonitor.isOnWifi() || wifiGuardConfirmed) {
+                executePlay(tracks, startIndex)
+            } else {
+                pendingPlay = tracks to startIndex
+                showStreamingWifiWarning.value = true
+            }
         }
     }
 

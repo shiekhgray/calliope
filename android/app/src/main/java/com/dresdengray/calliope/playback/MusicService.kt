@@ -7,6 +7,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
@@ -100,14 +101,16 @@ class MusicService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Build a DataSource.Factory that reads the access token fresh for each stream request
-        val dataSourceFactory = DefaultHttpDataSource.Factory().apply {
+        // Build a DataSource.Factory that reads the access token fresh for each stream request.
+        // DefaultDataSource wraps the HTTP factory so file:// URIs (downloaded tracks) also work.
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory().apply {
             setDefaultRequestProperties(
                 mapOf("Authorization" to "Bearer ${tokenStorage.accessToken.orEmpty()}")
             )
             setConnectTimeoutMs(15_000)
             setReadTimeoutMs(15_000)
         }
+        val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
 
         player = ExoPlayer.Builder(this)
             .setMediaSourceFactory(
