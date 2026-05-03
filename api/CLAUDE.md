@@ -11,9 +11,9 @@ docker compose exec api alembic upgrade head
 | File | Endpoints |
 |---|---|
 | `auth.py` | POST /auth/login (OAuth2 form), /auth/refresh, GET /auth/me, POST /auth/change-password |
-| `artists.py` | GET /artists (excludes VA), /artists/{id}/albums, /artists/{id}/top-tracks, /artists/{id}/compilations |
+| `artists.py` | GET /artists (excludes VA), /artists/{id}/albums, /artists/{id}/top-tracks?limit=N (default 25, uses album_artists join), /artists/{id}/compilations |
 | `albums.py` | GET /albums/{id}, /albums/{id}/art, PUT /albums/{id}/art (multipart, writes Folder.jpg) |
-| `tracks.py` | GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar |
+| `tracks.py` | GET /tracks?sort=play_count&limit=N (auth, default 50), GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar |
 | `genres.py` | GET /genres (accepts `?q=` for autocomplete filter) |
 | `search.py` | GET /search?q= (unaccent), GET/POST /search/history (auth; upsert + prune to 10) |
 | `playlists.py` | Full CRUD + add/remove/reorder tracks |

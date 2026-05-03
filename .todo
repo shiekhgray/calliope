@@ -51,4 +51,5 @@
 
 ## Later
 - [ ] [Android Auto](prd/android-auto.md) — full browse tree, radio mode, offline playback
+      Note: API endpoints done — GET /tracks?sort=play_count&limit=N added; GET /artists/{id}/top-tracks fixed (album_artists join, configurable limit). Android implementation pending.
 - [ ] [Phase 6: Polish & Search](prd/phase6-polish.md)
