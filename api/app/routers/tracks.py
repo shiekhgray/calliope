@@ -18,6 +18,29 @@ router = APIRouter(prefix="/tracks", tags=["tracks"])
 CHUNK_SIZE = 1024 * 512  # 512 KB
 
 
+@router.get("")
+def list_tracks(
+    sort: str = Query(default="play_count"),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    rows = db.execute(
+        text("""
+            SELECT t.id, t.title, t.track_number, t.duration_ms, t.bitrate_kbps,
+                   t.format, t.play_count, t.album_id,
+                   al.title AS album_title, ar.id AS artist_id, ar.name AS artist_name
+            FROM tracks t
+            JOIN albums al ON al.id = t.album_id
+            JOIN artists ar ON ar.id = al.artist_id
+            ORDER BY t.play_count DESC
+            LIMIT :limit
+        """),
+        {"limit": limit},
+    ).fetchall()
+    return [dict(row._mapping) for row in rows]
+
+
 @router.get("/{track_id}/stream")
 def stream_track(track_id: int, request: Request, db: Session = Depends(get_db)):
     track = db.get(models.Track, track_id)

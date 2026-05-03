@@ -24,7 +24,7 @@ export default function ArtistPage() {
 
   const { data: topTracks = [] } = useQuery({
     queryKey: ['artist-top-tracks', id],
-    queryFn: () => api.get(`/artists/${id}/top-tracks`).then((r) => r.data),
+    queryFn: () => api.get(`/artists/${id}/top-tracks?limit=10`).then((r) => r.data),
   })
 
   const { data: compilations = [] } = useQuery({

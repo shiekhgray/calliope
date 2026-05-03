@@ -1,10 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, text
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models
-from app.models import Album, Track
 
 router = APIRouter(prefix="/artists", tags=["artists"])
 
@@ -84,31 +83,35 @@ def list_artist_compilations(artist_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{artist_id}/top-tracks")
-def top_tracks(artist_id: int, db: Session = Depends(get_db)):
+def top_tracks(
+    artist_id: int,
+    limit: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
     artist = db.get(models.Artist, artist_id)
     if not artist:
         raise HTTPException(status_code=404)
-    tracks = (
-        db.query(Track)
-        .join(Album, Track.album_id == Album.id)
-        .filter(Album.artist_id == artist_id)
-        .order_by(Track.play_count.desc(), func.random())
-        .limit(10)
-        .all()
-    )
-    return [
-        {
-            "id": t.id,
-            "title": t.title,
-            "track_number": t.track_number,
-            "duration_ms": t.duration_ms,
-            "bitrate_kbps": t.bitrate_kbps,
-            "format": t.format,
-            "play_count": t.play_count,
-            "album_id": t.album_id,
-            "album_title": t.album.title,
-            "artist_id": artist_id,
-            "artist_name": artist.name,
-        }
-        for t in tracks
-    ]
+    rows = db.execute(
+        text("""
+            SELECT DISTINCT t.id, t.title, t.track_number, t.duration_ms, t.bitrate_kbps,
+                   t.format, t.play_count, t.album_id,
+                   al.title AS album_title, al.artist_id, ar.name AS artist_name
+            FROM tracks t
+            JOIN albums al ON al.id = t.album_id
+            JOIN artists ar ON ar.id = al.artist_id
+            WHERE (
+                EXISTS (
+                    SELECT 1 FROM album_artists aa
+                    WHERE aa.album_id = al.id AND aa.artist_id = :artist_id
+                )
+                OR (
+                    al.artist_id = :artist_id
+                    AND NOT EXISTS (SELECT 1 FROM album_artists aa WHERE aa.album_id = al.id)
+                )
+            )
+            ORDER BY t.play_count DESC, t.id
+            LIMIT :limit
+        """),
+        {"artist_id": artist_id, "limit": limit},
+    ).fetchall()
+    return [dict(row._mapping) for row in rows]
