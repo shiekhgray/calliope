@@ -61,6 +61,12 @@ interface CalliopeApi {
     @POST("tracks/{id}/played")
     suspend fun reportPlayed(@Path("id") trackId: Int): PlayedResponse
 
+    @GET("tracks/{id}/similar")
+    suspend fun getSimilarTracks(
+        @Path("id") trackId: Int,
+        @Query("limit") limit: Int = 5
+    ): List<Track>
+
     // Search
     @GET("search")
     suspend fun search(@Query("q") q: String): SearchResults
