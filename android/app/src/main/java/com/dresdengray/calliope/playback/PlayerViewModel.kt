@@ -11,6 +11,7 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.dresdengray.calliope.data.api.CalliopeApi
 import com.dresdengray.calliope.data.api.model.Track
 import com.dresdengray.calliope.data.db.DownloadedTrackDao
 import com.dresdengray.calliope.util.Constants
@@ -43,11 +44,18 @@ data class PlayerUiState(
 class PlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloadedTrackDao: DownloadedTrackDao,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val api: CalliopeApi
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    private val _similarTracks = MutableStateFlow<List<Track>>(emptyList())
+    val similarTracks: StateFlow<List<Track>> = _similarTracks.asStateFlow()
+
+    private val _radioMode = MutableStateFlow(false)
+    val radioMode: StateFlow<Boolean> = _radioMode.asStateFlow()
 
     // WiFi guard — session-scoped, cleared when ViewModel is destroyed
     private var wifiGuardConfirmed = false
@@ -57,6 +65,7 @@ class PlayerViewModel @Inject constructor(
     private var mediaController: MediaController? = null
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private var positionJob: Job? = null
+    private var similarTracksJob: Job? = null
 
     // Local mirror of the queue — needed to resolve Track from currentMediaItemIndex
     private val _queueTracks = mutableListOf<Track>()
@@ -80,6 +89,9 @@ class PlayerViewModel @Inject constructor(
                     durationMs = duration
                 )
             }
+            val trackId = track?.id ?: return
+            fetchSimilarTracks(trackId)
+            if (_radioMode.value) checkAndExtendRadioQueue(trackId)
         }
 
         override fun onPlaybackStateChanged(state: Int) {
@@ -125,6 +137,7 @@ class PlayerViewModel @Inject constructor(
             )
         }
         if (controller.isPlaying) startPositionUpdates()
+        track?.let { fetchSimilarTracks(it.id) }
     }
 
     /** Play a list of tracks, starting at [startIndex]. Shows a WiFi warning if on cellular. */
@@ -201,6 +214,46 @@ class PlayerViewModel @Inject constructor(
         _uiState.update { it.copy(positionMs = positionMs) }
     }
 
+    fun toggleRadioMode() {
+        val nowOn = !_radioMode.value
+        _radioMode.value = nowOn
+        if (nowOn) {
+            _uiState.value.currentTrack?.let { checkAndExtendRadioQueue(it.id) }
+        }
+    }
+
+    private fun fetchSimilarTracks(trackId: Int) {
+        similarTracksJob?.cancel()
+        similarTracksJob = viewModelScope.launch {
+            _similarTracks.value = emptyList()
+            runCatching { api.getSimilarTracks(trackId, limit = 5) }
+                .onSuccess { _similarTracks.value = it }
+        }
+    }
+
+    /** When radio mode is on and the queue is nearly empty, append similar tracks. */
+    private fun checkAndExtendRadioQueue(currentTrackId: Int) {
+        val controller = mediaController ?: return
+        val remaining = controller.mediaItemCount - controller.currentMediaItemIndex - 1
+        if (remaining > 1) return
+        viewModelScope.launch {
+            runCatching { api.getSimilarTracks(currentTrackId, limit = 10) }
+                .onSuccess { similar ->
+                    val existingIds = _queueTracks.map { it.id }.toSet()
+                    val toAppend = similar.filter { it.id !in existingIds }.take(5)
+                    if (toAppend.isEmpty()) return@onSuccess
+                    val items = toAppend.map { track ->
+                        val local = downloadedTrackDao.findDoneByTrackId(track.id.toLong())
+                        val localPath = local?.filePath?.takeIf { File(it).exists() }
+                        track.toMediaItem(localFilePath = localPath)
+                    }
+                    _queueTracks.addAll(toAppend)
+                    _uiState.update { it.copy(queueTracks = _queueTracks.toList()) }
+                    items.forEach { controller.addMediaItem(it) }
+                }
+        }
+    }
+
     private fun startPositionUpdates() {
         positionJob?.cancel()
         positionJob = viewModelScope.launch {
@@ -223,6 +276,7 @@ class PlayerViewModel @Inject constructor(
 
     override fun onCleared() {
         stopPositionUpdates()
+        similarTracksJob?.cancel()
         mediaController?.removeListener(playerListener)
         controllerFuture?.let { MediaController.releaseFuture(it) }
         super.onCleared()
