@@ -17,6 +17,16 @@ class User(Base):
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(128), nullable=False)
 
+    sim_weight_timbre            = Column(Integer, nullable=False, default=5)
+    sim_weight_timbral_variation = Column(Integer, nullable=False, default=5)
+    sim_weight_harmony           = Column(Integer, nullable=False, default=5)
+    sim_weight_chord_movement    = Column(Integer, nullable=False, default=5)
+    sim_weight_tempo             = Column(Integer, nullable=False, default=5)
+    sim_weight_loudness          = Column(Integer, nullable=False, default=5)
+    sim_weight_dynamic_range     = Column(Integer, nullable=False, default=5)
+    sim_weight_brightness        = Column(Integer, nullable=False, default=5)
+    sim_weight_tonal             = Column(Integer, nullable=False, default=5)
+
     playlists = relationship("Playlist", back_populates="owner")
 
 

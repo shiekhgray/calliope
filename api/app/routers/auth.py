@@ -62,9 +62,59 @@ def refresh(payload: dict, db: Session = Depends(get_db)):
     }
 
 
+def _user_response(user: models.User) -> dict:
+    return {
+        "id": user.id,
+        "username": user.username,
+        "sim_weight_timbre":            user.sim_weight_timbre,
+        "sim_weight_timbral_variation": user.sim_weight_timbral_variation,
+        "sim_weight_harmony":           user.sim_weight_harmony,
+        "sim_weight_chord_movement":    user.sim_weight_chord_movement,
+        "sim_weight_tempo":             user.sim_weight_tempo,
+        "sim_weight_loudness":          user.sim_weight_loudness,
+        "sim_weight_dynamic_range":     user.sim_weight_dynamic_range,
+        "sim_weight_brightness":        user.sim_weight_brightness,
+        "sim_weight_tonal":             user.sim_weight_tonal,
+    }
+
+
 @router.get("/me")
 def me(current_user: models.User = Depends(get_current_user)):
-    return {"id": current_user.id, "username": current_user.username}
+    return _user_response(current_user)
+
+
+_WEIGHT_KEYS = [
+    "timbre",
+    "timbral_variation",
+    "harmony",
+    "chord_movement",
+    "tempo",
+    "loudness",
+    "dynamic_range",
+    "brightness",
+    "tonal",
+]
+
+
+@router.put("/similarity-weights")
+def update_similarity_weights(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    for key in _WEIGHT_KEYS:
+        if key not in body:
+            continue
+        value = body[key]
+        if not isinstance(value, int) or value < 0 or value > 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Value for '{key}' must be an integer between 0 and 10",
+            )
+        setattr(current_user, f"sim_weight_{key}", value)
+    db.commit()
+    db.refresh(current_user)
+    return _user_response(current_user)
 
 
 @router.post("/change-password", status_code=204)

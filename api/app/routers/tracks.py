@@ -128,7 +128,7 @@ def similar_tracks(
     track_id: int,
     limit: int = Query(default=25, ge=1, le=100),
     db: Session = Depends(get_db),
-    _user=Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     tv = db.query(models.TrackVector).filter_by(track_id=track_id).first()
     if not tv:
@@ -147,6 +147,14 @@ def similar_tracks(
         stds = np.array(norm.stds, dtype=np.float32)
         stds[stds == 0] = 1.0
         matrix = (matrix - means) / stds
+
+    # apply per-user similarity weights after z-score, before L2 normalization
+    weights = np.ones(60, dtype=np.float32)
+    for group, sl in DIM_SLICES.items():
+        col = f"sim_weight_{group}"
+        w = float(getattr(current_user, col, 5))
+        weights[sl] *= w / 5.0
+    matrix *= weights  # broadcast: shape (N, 60)
 
     row_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     row_norms[row_norms == 0] = 1.0
