@@ -113,12 +113,35 @@ vector_norm_params id (always 1), means float[38], stds float[38], updated_at
 
 ## Expert Agents (`.claude/commands/`)
 
-Use these when working in a subsystem — each loads its own file context:
+Four expert skills cover the main subsystems. **Always run them as isolated
+`general-purpose` agents** rather than inline skills — this keeps the main
+context clean and allows parallel execution.
 
-- `/api` — FastAPI backend, routers, models, migrations, scanner
-- `/web` — React frontend, player, auth, CSS
-- `/similarity` — MFCC/chroma pipeline, pgvector, radio mode
-- `/android` — Kotlin/Compose/ExoPlayer (not yet coded)
+**Invocation pattern:**
+
+```python
+# Single subsystem
+Agent(
+    subagent_type="general-purpose",
+    prompt=open(".claude/commands/api.md").read() + "\n\nTASK: " + task,
+)
+
+# Parallel (API + web simultaneously)
+Agent(subagent_type="general-purpose", prompt=api_md + task_a, run_in_background=True)
+Agent(subagent_type="general-purpose", prompt=web_md + task_b, run_in_background=True)
+```
+
+In practice: read the skill file with the `Read` tool, append the task
+description, and pass to `Agent(subagent_type="general-purpose")`.
+
+| Skill file | Subsystem |
+|---|---|
+| `.claude/commands/api.md` | FastAPI backend, routers, models, migrations, scanner |
+| `.claude/commands/web.md` | React frontend, player, auth, CSS |
+| `.claude/commands/similarity.md` | MFCC/chroma pipeline, pgvector, radio mode |
+| `.claude/commands/android.md` | Kotlin/Compose/ExoPlayer/Android Auto |
+
+Utility skills (still invoked inline via `Skill()`):
 - `/import-music` — import zips from `~/Music/` staging area
 - `/coffee` / `/beer` — session start / save state
 
