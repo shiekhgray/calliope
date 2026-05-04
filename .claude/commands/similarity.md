@@ -10,26 +10,20 @@ pipeline, the pgvector storage design, incremental indexing, and how the engine
 integrates with the scanner and frontend radio mode. When investigating or changing
 this subsystem, read the relevant files first, then make targeted changes.
 
-## Current Codebase
+## Read before starting
 
-Indexer container:
-!`cat -n /home/gray/calliope/indexer/app/index.py`
-!`cat -n /home/gray/calliope/indexer/app/main.py`
-!`cat -n /home/gray/calliope/indexer/app/models.py`
-!`cat -n /home/gray/calliope/indexer/app/config.py`
-!`cat /home/gray/calliope/indexer/Dockerfile`
-!`cat /home/gray/calliope/indexer/requirements.txt`
+Read these files to understand current state before making any changes:
 
-API side (similarity query + scanner integration):
-!`cat -n /home/gray/calliope/api/app/routers/tracks.py`
-!`cat -n /home/gray/calliope/api/app/routers/scanner.py`
-
-Frontend radio mode:
-!`cat -n /home/gray/calliope/web/src/player/PlayerContext.jsx`
-
-Planned expansion:
-!`cat /home/gray/calliope/prd/vector-expansion.md`
-!`cat /home/gray/calliope/prd/similarity-weights.md`
+- `/home/gray/calliope/indexer/app/index.py` — feature extraction and indexing loop
+- `/home/gray/calliope/indexer/app/main.py` — HTTP server endpoints
+- `/home/gray/calliope/indexer/app/models.py` — DB models for indexer
+- `/home/gray/calliope/indexer/app/config.py` — indexer config
+- `/home/gray/calliope/indexer/Dockerfile` — indexer container setup
+- `/home/gray/calliope/api/app/routers/tracks.py` — similarity query endpoint
+- `/home/gray/calliope/api/app/routers/scanner.py` — two-phase scan + index trigger
+- `/home/gray/calliope/web/src/player/PlayerContext.jsx` — radio mode client
+- `/home/gray/calliope/prd/vector-expansion.md` — planned 60-dim expansion
+- `/home/gray/calliope/prd/similarity-weights.md` — planned per-user weight sliders
 
 ## Architecture
 
@@ -79,15 +73,12 @@ Brute-force numpy, not pgvector ANN — fast enough at ~3k tracks. HNSW index ex
 
 ### Radio mode (`PlayerContext.jsx`)
 
-`_extendWithRadio()` fires when:
-- Queue empties naturally (via `onended`)
-- `skipNext()` called at end of queue
-
+`_extendWithRadio()` fires when queue empties or `skipNext()` at end of queue.
 Fetches `GET /tracks/{currentTrack.id}/similar?limit=25`, filters out `sessionPlayed` tracks and tracks from the seed album, picks the next one.
 
 ## Critical Gotchas
 
-- `librosa` is imported inside `index.py` only — never at API startup. Heavy dependency (scipy, scikit-learn).
+- `librosa` is imported inside `index.py` only — never at API startup. Heavy dependency.
 - MFCC coefficient 0 tracks overall loudness. Without normalization it dominates cosine similarity — normalization is non-negotiable.
 - Loading at fixed `sr=22050` avoids WAV sample-rate issues. Do not use `sr=None`.
 - `np.atleast_1d(tempo)[0]` needed when adding tempo — librosa 0.10.x returns scalar or 1-element array.

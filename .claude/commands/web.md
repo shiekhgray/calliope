@@ -17,21 +17,19 @@ relevant files first, then make targeted changes.
 - Changes to `web/package.json` or `web/vite.config.js` require container restart
 - BrowserRouter with `basename="/calliope"` — all `<Link to="">` and `navigate()` paths are relative to this base
 
-## Current Codebase
+## Read before starting
 
-App entry: !`cat -n /home/gray/calliope/web/src/main.jsx`
-Routes: !`cat -n /home/gray/calliope/web/src/App.jsx`
-PlayerContext: !`cat -n /home/gray/calliope/web/src/player/PlayerContext.jsx`
-AuthContext: !`cat -n /home/gray/calliope/web/src/auth/AuthContext.jsx`
-API client: !`cat -n /home/gray/calliope/web/src/api/client.js`
-Layout: !`cat -n /home/gray/calliope/web/src/components/Layout.jsx`
-PlayerBar: !`cat -n /home/gray/calliope/web/src/components/PlayerBar.jsx`
-AddToPlaylistMenu: !`cat -n /home/gray/calliope/web/src/components/AddToPlaylistMenu.jsx`
-ChangePasswordModal: !`cat -n /home/gray/calliope/web/src/components/ChangePasswordModal.jsx`
-Pages: !`ls /home/gray/calliope/web/src/pages/`
-Hooks: !`ls /home/gray/calliope/web/src/hooks/ 2>/dev/null || echo "(none yet)"`
-CSS: !`cat -n /home/gray/calliope/web/src/index.css`
-Vite config: !`cat -n /home/gray/calliope/web/vite.config.js`
+Read these files to understand current state before making any changes:
+
+- `/home/gray/calliope/web/src/App.jsx` — routes
+- `/home/gray/calliope/web/src/main.jsx` — app entry, QueryClient setup
+- `/home/gray/calliope/web/src/player/PlayerContext.jsx` — player state, playTrack API
+- `/home/gray/calliope/web/src/auth/AuthContext.jsx` — auth state, userId
+- `/home/gray/calliope/web/src/api/client.js` — axios instance
+- `/home/gray/calliope/web/src/index.css` — all CSS variables and class definitions
+- `/home/gray/calliope/web/src/pages/` — list to see all pages; read whichever are relevant
+- `/home/gray/calliope/web/src/components/Layout.jsx` — shell, nav, UserMenu
+- `/home/gray/calliope/web/CLAUDE.md` — additional conventions and current state
 
 ---
 
@@ -49,8 +47,9 @@ All routes are under `<RequireAuth>` except `/login`. Unauthenticated access red
 | /playlists | PlaylistsPage |
 | /playlists/:id | PlaylistPage |
 | /releases | ReleasesPage |
-
-`RequireAuth` is a simple wrapper: if `!loggedIn`, renders `<Navigate to="/login" replace />`.
+| /compilations | CompilationsPage |
+| /now-playing | NowPlayingPage |
+| /import | ImportPage |
 
 ---
 
@@ -67,19 +66,16 @@ Single `Audio` element created at module scope (singleton for app lifetime).
 | `progress` | number | Current playback position in seconds |
 | `duration` | number | Total duration in seconds |
 | `volume` | number | 0–1 |
-| `playTrack(track, trackList?)` | fn | Load and play a track; sets queue to trackList (defaults to [track]); requires enriched track |
+| `radioMode` | bool | Radio mode state; localStorage-persisted |
+| `queue`, `queueIndex` | array, int | Current queue and position |
+| `history` | array | Played tracks, most-recent-first, capped at 10 |
+| `playTrack(track, trackList?)` | fn | Load and play; sets queue to trackList (defaults to [track]) |
 | `togglePlay()` | fn | Play/pause toggle; no-op if no currentTrack |
 | `seek(seconds)` | fn | Seek to position |
-| `skipNext()` | fn | Advance to next in queue |
-| `skipPrev()` | fn | If progress > 3s: seek to 0. Else: go to previous in queue. |
+| `skipNext()` | fn | Advance queue; extends via radio if at end |
+| `skipPrev()` | fn | If progress > 3s: seek to 0. Else: go to previous. |
 | `setVolume(v)` | fn | Set volume 0–1 |
-
-**Internal behavior:**
-- `onended`: fires `POST /tracks/{id}/played` (fire-and-forget, errors swallowed), then auto-advances queue
-- `ontimeupdate`: updates `progress` state
-- `ondurationchange`: updates `duration` state
-- Queue is `[track, ...]`; `queueIndex` tracks current position
-- `playTrack(track, trackList)`: finds track in list by id; if not found, uses index 0
+| `toggleRadioMode()` | fn | Toggle radio; persists to localStorage |
 
 **Track enrichment requirement**: every track passed to `playTrack()` MUST include:
 `album_id`, `album_title`, `artist_id`, `artist_name`
@@ -94,96 +90,62 @@ PlayerBar uses these for navigation links. Missing fields cause links to silentl
 | Name | Type | Description |
 |---|---|---|
 | `loggedIn` | bool | True if access_token exists in localStorage |
-| `username` | string | From localStorage; recovered via GET /auth/me if missing |
-| `login(user, password)` | async fn | Posts form-encoded to `/calliope/api/auth/login`; stores tokens + username in localStorage |
-| `logout()` | fn | Clears localStorage tokens + username |
-
-On mount: if `loggedIn && !username`, calls `GET /auth/me` to recover username (handles pre-existing sessions after deploys that added username storage).
+| `username` | string | From localStorage |
+| `userId` | number\|null | From localStorage; fetched via /auth/me after login |
+| `login(user, password)` | async fn | Posts form-encoded; stores tokens + username in localStorage |
+| `logout()` | fn | Clears localStorage |
 
 ---
 
 ## API Client (`web/src/api/client.js`)
 
 - `axios` instance with `baseURL: '/calliope/api'`
-- Request interceptor: attaches `Authorization: Bearer <access_token>` from localStorage
-- Response interceptor: on 401, tries refresh once (`POST /calliope/api/auth/refresh` with refresh_token), retries original request. On refresh failure: clears tokens, redirects to `/calliope/login`.
-- **Use this client for all API calls.** Direct `axios` (not the `api` instance) or `<img src>` / `audio.src` must use the full `/calliope/api/` prefix.
+- Request interceptor: attaches `Authorization: Bearer <access_token>`
+- Response interceptor: on 401, tries refresh once; on refresh failure: clears tokens, redirects to `/calliope/login`
+- **Use this client for all API calls.** Direct `axios` or `<img src>` / `audio.src` must use the full `/calliope/api/` prefix.
 
 ---
 
 ## Pages
 
 ### LibraryPage (`/`)
-Fetches `GET /artists` → React Query key `['artists']`. Renders artist list with links to `/artists/:id`.
+Fetches `GET /artists` → key `['artists']`. Artist list with links to `/artists/:id`.
 
 ### ArtistPage (`/artists/:id`)
-Fetches:
-- `GET /artists/{id}/albums` → key `['artist-albums', id]`
-- `GET /artists/{id}/top-tracks` → key `['artist-top-tracks', id]`
-- `GET /discover?artist_id={id}` → key `['discoveries', 'artist', id]`
+Fetches: `['artist-albums', id]`, `['artist-top-tracks', id]`, `['artist-singles', id]`, `['artist-compilations', id]`, `['discoveries', 'artist', id]`.
 
-Renders: artist name (from `albums[0].artist_name`), Top Tracks table (always shown, even if 0 plays), Albums grid, Missing Releases section (only if non-empty).
+Section order: Top Tracks → Albums → Singles & EPs (conditional) → Appears On (conditional) → Missing Releases (conditional).
 
-Missing Releases: reuses `.releases-grid` / `.release-card` CSS. Dismiss button only shown when `loggedIn`. Dismiss invalidates both `['discoveries', 'artist', id]` and `['discoveries']` to keep ReleasesPage in sync.
-
-Album art: `<img src="/calliope/api/albums/{id}/art">` — hardcoded prefix, not through `api` client.
+Singles & EPs: each card has a play-button overlay (bottom-right of art) that calls `playTrack(single.first_track, [single.first_track])`. Type badge ("Single"/"EP") shown below title.
 
 ### AlbumPage (`/albums/:id`)
-Fetches `GET /albums/{id}` → key `['album', id]`.
+Fetches `['album', id]` and `['album-artists', id]`.
 
-Enriches tracks with album context via local `enrichedTrack(t)` helper that adds `album_title`, `album_id`, `artist_id`, `artist_name`.
+Album header includes a type-cycle pill (owner: cycles Album→EP→Single; non-owner: static label for EP/Single only). Calls `PATCH /albums/{id}/type`; invalidates `['album', id]`, `['artist-albums', artistId]`, `['artist-singles', artistId]`.
 
-Album art: hover overlay for upload. Click triggers hidden `<input type="file">`. Upload via `api.put('/albums/${id}/art', form)` — do NOT set Content-Type manually, let browser set boundary. Cache-busts displayed image with `?v=${artVersion}` local state after upload.
-
-Track table: double-click or play button starts playback. Active row has class `active` and `.track-name` turns accent color. Shows bitrate (muted) and play_count (blank when 0).
+Track enrichment via local `enrichedTrack(t)` helper adds album/artist context. Deep-link via `?play=trackId`.
 
 ### SearchPage (`/search`)
-Two-part: `SearchHistory` component (shown when logged in + history non-empty) above the search form.
+SearchHistory chips (logged in) + search form. `['search-history']` key.
 
-`SearchHistory`: fetches `GET /search/history` → key `['search-history']`, enabled only when loggedIn. Chips navigate (artist/album) or play (track) and fire `POST /search/history` + invalidate `['search-history']`.
-
-Search: controlled input, submits on form submit. `GET /search?q=` → key `['search', submitted]`, disabled when submitted is empty. Results: artist links fire recordHistory + navigate. Album clicks fire recordHistory + navigate. Track play buttons fire recordHistory + playTrack.
-
-### PlaylistsPage (`/playlists`)
-Fetches `GET /playlists` → key `['playlists']`. Create (inline form toggle) and delete mutations. No auth guard on fetching; mutations use authed API client.
-
-### PlaylistPage (`/playlists/:id`)
-Fetches `GET /playlists/{id}` → key `['playlist', id]`.
-
-Drag-and-drop reorder: native HTML5 DnD. `localTracks` state holds optimistic order during drag. On drop: updates `localTracks`, fires `PUT /playlists/{id}/tracks/reorder`. On API error: resets `localTracks` to null (reverts to server state). `onSuccess` of fresh fetch also resets `localTracks`.
-
-Track objects from entries already include `album_id`, `album_title`, `artist_id`, `artist_name` — no enrichment needed. `entry_id` used as React key (not track.id, since same track can appear multiple times).
-
-Rename: inline form replaces title on edit. Removes track: `DELETE /playlists/{id}/tracks/{track_id}`.
+### PlaylistsPage / PlaylistPage (`/playlists`, `/playlists/:id`)
+Full CRUD. PlaylistPage: native DnD reorder, `localTracks` optimistic state.
 
 ### ReleasesPage (`/releases`)
-Fetches `GET /discover` → key `['discoveries']`. Polls `/discover/status` on mount to seed `lastRefreshed` and detect in-progress refresh.
-
-Client-side filter + sort via `useMemo`: text filter (artist name or album title, case-insensitive substring), sort by Artist A–Z / Newest / Oldest. "Showing X of Y" count only shown when filter active.
-
-Refresh: posts `/discover/refresh`, then polls `/discover/status` every 2s. Handles 409 gracefully (already running → start polling). After completion: invalidates `['discoveries']`, shows "Up to date" for 3s.
-
-Dismiss: sets dismissed permanently. Dismissed entries never shown again even after refresh.
+iTunes discovery. Client-side filter + sort. Polls `/discover/status`. Dismiss is permanent.
 
 ---
 
 ## Components
 
 ### Layout (`components/Layout.jsx`)
-Shell: `top-nav` + `main-content` (scrollable) + `PlayerBar`. Nav links: Library, Search, Playlists, Releases. Brand: `<span className="nav-brand">Calliope</span>` (not a link currently).
-
-`UserMenu`: dropdown with Rescan Library, Change Password, Sign out. Rescan polls `/scanner/status` every 2s; handles 409. "Scan complete" shown in accent for 3s. Outside-click closes via mousedown listener.
+Shell: `top-nav` + `main-content` + `PlayerBar`. UserMenu: Import Music, Rescan Library, Change Password, Sign out.
 
 ### PlayerBar (`components/PlayerBar.jsx`)
-Returns null if `!currentTrack`. Three-column grid: track info (title + artist/album links) | controls (prev/play/next) | progress (elapsed/scrubber/total + volume).
-
-Links only render when all required enrichment fields are present (no fallback text). Volume: popover with vertical range slider.
+Returns null if `!currentTrack`. Art → /now-playing. Track info with artist/album links. Controls. Progress scrubber. Volume popover. Radio toggle (≋).
 
 ### AddToPlaylistMenu (`components/AddToPlaylistMenu.jsx`)
-`+` button opens popover. Fetches `['playlists']` only when open. Click adds track, shows "✓ Added" for 800ms, then closes.
-
-### ChangePasswordModal (`components/ChangePasswordModal.jsx`)
-Posts `POST /auth/change-password` with `{current_password, new_password}`. Client-side confirm match check. Shows success state after completion.
+`+` button opens popover. Fetches playlists only when open.
 
 ---
 
@@ -195,26 +157,30 @@ Posts `POST /auth/change-password` with `{current_password, new_password}`. Clie
 --surface2: #2a2a2a    /* inputs, popovers, hover states */
 --border: #333
 --text: #e0e0e0
---text-dim: #888       /* secondary labels, muted info */
---accent: #a855f7      /* purple — links, active states, buttons */
+--text-dim: #888       /* secondary labels */
+--accent: #a855f7      /* purple — links, active states */
 --accent-hover: #c084fc
---danger: #ef4444      /* delete buttons, errors */
---player-h: 72px       /* player bar height; used in main-content padding-bottom */
+--accent2: #7e22ce     /* nav brand */
+--accent-dim: #a855f733
+--danger: #ef4444
+--player-h: 72px
 ```
 
-Always use `var(--accent)` — never hardcode `#a855f7`. The accent will become dynamic (dynamic-theme PRD).
+Always use `var(--accent)` — never hardcode `#a855f7`. Accent is dynamic (changes with album art via `useAlbumAccent`).
 
 ## Key CSS Classes
 
 **Layout**: `.app-shell`, `.top-nav`, `.nav-brand`, `.nav-links`, `.main-content`, `.page`
 
-**Track table**: `.track-table`, `.track-num`, `.track-name`, `.track-play-btn`, `.track-duration`, `.track-bitrate`, `.track-play-count`, `.track-actions`, `.track-drag`, `.track-meta-dim`
+**Track table**: `.track-table`, `.track-num`, `.track-name`, `.track-play-btn`, `.track-duration`, `.track-bitrate`, `.track-play-count`, `.track-actions`, `.track-meta-dim`
 
-**Album**: `.album-grid`, `.album-card`, `.album-art-placeholder`, `.album-art-large`, `.album-art-upload-wrap`, `.album-art-upload-overlay`, `.album-header-info`, `.play-all-btn`
+**Album**: `.album-grid`, `.album-card`, `.album-info`, `.album-title`, `.album-year`, `.album-art-placeholder`, `.album-art-large`, `.album-art-upload-wrap`, `.album-art-upload-overlay`, `.album-header-info`, `.play-all-btn`
+
+**Singles**: `.single-art-wrap`, `.single-art-link`, `.single-info-link`, `.single-play-btn`, `.album-year-type`, `.album-type-badge`, `.album-type-pill`, `.album-type-pill--owner`
 
 **Player**: `.player-bar`, `.player-track-info`, `.player-title`, `.player-links`, `.player-link`, `.player-controls`, `.play-btn`, `.player-progress`, `.vol-wrap`, `.vol-popup`
 
-**Search**: `.search-form`, `.search-results`, `.search-history-section`, `.search-history-label`, `.search-history-grid`, `.search-history-chip`, `.track-result-list`, `.track-result-info`, `.track-result-title`, `.track-result-meta`
+**Search**: `.search-form`, `.search-results`, `.search-history-section`, `.search-history-chip`, `.track-result-list`, `.track-result-info`, `.track-result-title`, `.track-result-meta`
 
 **Playlists**: `.playlist-list`, `.playlist-item`, `.inline-form`, `.delete-btn`
 
@@ -233,18 +199,21 @@ Always use `var(--accent)` — never hardcode `#a855f7`. The accent will become 
 | Key | Data |
 |---|---|
 | `['artists']` | All artists |
-| `['artist-albums', id]` | Albums for artist |
-| `['artist-top-tracks', id]` | Top 10 tracks for artist |
+| `['artist-albums', id]` | Albums for artist (album_type='album' only) |
+| `['artist-singles', id]` | Singles & EPs for artist |
+| `['artist-top-tracks', id]` | Top tracks for artist |
+| `['artist-compilations', id]` | Compilation appearances |
 | `['album', id]` | Album + tracks |
+| `['album-artists', albumId]` | Album-level credits |
 | `['playlist', id]` | Playlist detail + entries |
 | `['playlists']` | All playlists |
 | `['discoveries']` | All non-dismissed discoveries |
 | `['discoveries', 'artist', id]` | Discoveries scoped to one artist |
-| `['search', q]` | Search results for query q |
-| `['search-history']` | Current user's 10 most recent history entries |
-| `['similar', trackId]` | Similar tracks (radio mode — not yet built) |
+| `['search', q]` | Search results |
+| `['search-history']` | Current user's 10 most recent visits |
+| `['similar', trackId]` | Similar tracks |
 
-Default query options (main.jsx): `retry: 1`, `staleTime: 30_000`
+Default query options: `retry: 1`, `staleTime: 30_000`
 
 ---
 
@@ -252,16 +221,14 @@ Default query options (main.jsx): `retry: 1`, `staleTime: 30_000`
 
 1. **Track enrichment**: always pass `album_id`, `album_title`, `artist_id`, `artist_name` with every `playTrack()` call. Missing fields cause PlayerBar links to silently disappear.
 
-2. **API URL prefix**: use `api` client (baseURL `/calliope/api`) for all fetch calls. For hardcoded URLs in JSX (`<img src>`, `audio.src`, direct axios): use `/calliope/api/` prefix — never `/api/`. Forgetting this causes silent failures.
+2. **API URL prefix**: use `api` client for all fetch calls. For `<img src>`, `audio.src`, direct axios: use `/calliope/api/` prefix — never `/api/`.
 
-3. **Art upload Content-Type**: do NOT set `Content-Type: multipart/form-data` on axios PUT — omit it entirely so browser sets the correct boundary automatically.
+3. **Art upload Content-Type**: do NOT set `Content-Type: multipart/form-data` — omit it so browser sets the correct boundary automatically.
 
-4. **Play count is fire-and-forget**: `POST /tracks/{id}/played` errors are swallowed. `onended` fires only on natural completion, not on skip.
+4. **Auth flow**: `login()` in AuthContext uses bare `axios` (not the `api` client) to avoid the auth interceptor on the login call itself.
 
-5. **Auth flow**: `login()` in AuthContext uses bare `axios` (not the `api` client) to avoid the auth interceptor on the login call itself.
+5. **BrowserRouter basename**: all `<Link to="...">` paths are relative to `/calliope`. Use `/artists/1` not `/calliope/artists/1`.
 
-6. **Vite proxy**: `/calliope/api` → `process.env.API_URL || http://localhost:8000` (strips `/calliope/api` prefix). In Docker: `API_URL=http://api:8000`. `allowedHosts` includes `dresdengray.com`.
+6. **Dismiss on ArtistPage** invalidates both `['discoveries', 'artist', id]` AND `['discoveries']` to keep ReleasesPage in sync.
 
-7. **BrowserRouter basename**: all `<Link to="...">` paths are relative to `/calliope`. Use `/artists/1` not `/calliope/artists/1` in Link and navigate().
-
-8. **Dismiss on ArtistPage** invalidates both `['discoveries', 'artist', id]` AND `['discoveries']` to keep ReleasesPage in sync.
+7. **isPlaying states**: `null` = nothing ever loaded; `false` = loaded but paused; `true` = playing. Spacebar hook uses `isPlaying !== null` to distinguish "toggle" vs "play first track".
