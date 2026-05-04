@@ -500,3 +500,29 @@ tr:hover .track-credits-row .credit-add-btn { opacity: 1; }
 .import-scan-done { color: var(--accent); }
 .import-progress-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; min-width: 120px; }
 .import-progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.2s ease; }
+
+/* ── Singles & EPs ── */
+.single-art-wrap { position: relative; }
+.single-art-link { display: block; }
+.single-art-link img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.single-info-link { display: block; padding: 10px; color: var(--text); }
+.single-info-link:hover { color: var(--text); }
+.single-play-btn {
+  position: absolute; bottom: 8px; right: 8px;
+  width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(0,0,0,0.65); color: #fff;
+  font-size: 0.8rem; display: flex; align-items: center; justify-content: center;
+}
+.single-play-btn:hover { background: var(--accent); }
+.album-year-type { display: flex; align-items: baseline; gap: 6px; margin-top: 2px; }
+.album-type-badge { font-size: 0.7rem; color: var(--text-dim); }
+
+/* ── Album type pill ── */
+.album-type-pill {
+  display: inline-block; margin-top: 6px;
+  padding: 2px 10px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface2);
+  font-size: 0.75rem; color: var(--text-dim);
+}
+.album-type-pill--owner { cursor: pointer; }
+.album-type-pill--owner:hover { border-color: var(--accent); color: var(--accent); }

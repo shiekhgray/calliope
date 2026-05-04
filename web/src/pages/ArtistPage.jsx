@@ -32,6 +32,11 @@ export default function ArtistPage() {
     queryFn: () => api.get(`/artists/${id}/compilations`).then((r) => r.data),
   })
 
+  const { data: singles = [] } = useQuery({
+    queryKey: ['artist-singles', id],
+    queryFn: () => api.get(`/artists/${id}/singles`).then((r) => r.data),
+  })
+
   const { data: missingReleases = [] } = useQuery({
     queryKey: ['discoveries', 'artist', id],
     queryFn: () => api.get('/discover', { params: { artist_id: id } }).then((r) => r.data),
@@ -103,9 +108,50 @@ export default function ArtistPage() {
         ))}
       </div>
 
+      {singles.length > 0 && (
+        <section style={{ marginTop: '36px' }}>
+          <h3 className="section-heading">Singles &amp; EPs</h3>
+          <div className="album-grid">
+            {singles.map((single) => {
+              const isThisPlaying = currentTrack?.id === single.first_track?.id && isPlaying
+              return (
+                <div key={single.id} className="album-card">
+                  <div className="single-art-wrap">
+                    <Link to={`/albums/${single.id}`} className="single-art-link">
+                      {single.cover_art_path ? (
+                        <img src={`/calliope/api/albums/${single.id}/art`} alt={single.title} />
+                      ) : (
+                        <div className="album-art-placeholder">♪</div>
+                      )}
+                    </Link>
+                    {single.first_track && (
+                      <button
+                        className="single-play-btn"
+                        onClick={() => playTrack(single.first_track, [single.first_track])}
+                      >
+                        {isThisPlaying ? '⏸' : '▶'}
+                      </button>
+                    )}
+                  </div>
+                  <Link to={`/albums/${single.id}`} className="album-info single-info-link">
+                    <span className="album-title">{single.title}</span>
+                    <div className="album-year-type">
+                      {single.year && <span className="album-year">{single.year}</span>}
+                      <span className="album-type-badge">
+                        {single.album_type === 'ep' ? 'EP' : 'Single'}
+                      </span>
+                    </div>
+                  </Link>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
       {compilations.length > 0 && (
         <section style={{ marginTop: '36px' }}>
-          <h3 className="section-heading">Singles, Remixes and Collaborations</h3>
+          <h3 className="section-heading">Appears On</h3>
           <div className="album-grid">
             {compilations.map((album) => (
               <Link key={album.id} to={`/albums/${album.id}`} className="album-card">

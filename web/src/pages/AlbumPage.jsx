@@ -290,6 +290,18 @@ export default function AlbumPage() {
 
   const isOwner = userId === 1
 
+  const TYPE_CYCLE = { album: 'ep', ep: 'single', single: 'album' }
+  const TYPE_LABEL = { album: 'Album', ep: 'EP', single: 'Single' }
+
+  const typeMutation = useMutation({
+    mutationFn: (newType) => api.patch(`/albums/${id}/type`, { album_type: newType }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['album', id] })
+      queryClient.invalidateQueries({ queryKey: ['artist-albums', String(data.data.artist_id)] })
+      queryClient.invalidateQueries({ queryKey: ['artist-singles', String(data.data.artist_id)] })
+    },
+  })
+
   function handleArtUpload(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -382,6 +394,22 @@ export default function AlbumPage() {
             }
           </p>
           {album.year && <p className="album-year">{album.year}</p>}
+          {isOwner ? (
+            <button
+              className="album-type-pill album-type-pill--owner"
+              onClick={() => typeMutation.mutate(TYPE_CYCLE[album.album_type] ?? 'album')}
+              disabled={typeMutation.isPending}
+              title="Click to change type"
+            >
+              {TYPE_LABEL[album.album_type] ?? 'Album'}
+            </button>
+          ) : (
+            album.album_type !== 'album' && (
+              <span className="album-type-pill">
+                {TYPE_LABEL[album.album_type]}
+              </span>
+            )
+          )}
           <button
             className="play-all-btn"
             onClick={() => tracks.length && handlePlay(tracks[0])}
