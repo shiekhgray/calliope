@@ -37,6 +37,7 @@ class Album(Base):
     title = Column(String(255), nullable=False)
     year = Column(Integer)
     cover_art_path = Column(Text)
+    album_type = Column(String(8), nullable=False, default="album")
 
     artist = relationship("Artist", back_populates="albums")
     tracks = relationship("Track", back_populates="album", order_by="Track.track_number")

@@ -2,7 +2,7 @@ import mimetypes
 import os
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -42,6 +42,7 @@ def get_album(album_id: int, db: Session = Depends(get_db)):
         "title": album.title,
         "year": album.year,
         "cover_art_path": album.cover_art_path,
+        "album_type": album.album_type,
         "artist_id": album.artist_id,
         "artist_name": album.artist.name,
         "tracks": [
@@ -89,6 +90,37 @@ async def upload_album_art(
     db.commit()
 
     return {"cover_art_path": rel_path}
+
+
+_VALID_ALBUM_TYPES = {"album", "ep", "single"}
+
+
+@router.patch("/{album_id}/type")
+def set_album_type(
+    album_id: int,
+    album_type: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    if current_user.id != 1:
+        raise HTTPException(status_code=403, detail="Owner only")
+    if album_type not in _VALID_ALBUM_TYPES:
+        raise HTTPException(status_code=400, detail="album_type must be 'album', 'ep', or 'single'")
+    album = db.get(models.Album, album_id)
+    if not album:
+        raise HTTPException(status_code=404)
+    album.album_type = album_type
+    db.commit()
+    db.refresh(album)
+    return {
+        "id": album.id,
+        "title": album.title,
+        "year": album.year,
+        "cover_art_path": album.cover_art_path,
+        "album_type": album.album_type,
+        "artist_id": album.artist_id,
+        "artist_name": album.artist.name,
+    }
 
 
 @router.get("/{album_id}/art")

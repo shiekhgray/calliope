@@ -38,6 +38,7 @@ def list_albums(artist_id: int, db: Session = Depends(get_db)):
         JOIN album_artists aa ON aa.album_id = al.id
         JOIN artists ar2 ON ar2.id = al.artist_id
         WHERE aa.artist_id = :artist_id
+          AND al.album_type = 'album'
         ORDER BY al.year, al.title
     """), {"artist_id": artist_id}).fetchall()
     return [
@@ -48,6 +49,53 @@ def list_albums(artist_id: int, db: Session = Depends(get_db)):
             "cover_art_path": row.cover_art_path,
             "artist_id": row.artist_id,
             "artist_name": row.artist_name,
+        }
+        for row in rows
+    ]
+
+
+@router.get("/{artist_id}/singles")
+def list_singles(artist_id: int, db: Session = Depends(get_db)):
+    artist = db.get(models.Artist, artist_id)
+    if not artist:
+        raise HTTPException(status_code=404)
+    rows = db.execute(text("""
+        SELECT DISTINCT
+            al.id, al.title, al.year, al.cover_art_path, al.album_type,
+            al.artist_id, ar2.name AS artist_name,
+            ft.id AS ft_id, ft.title AS ft_title, ft.duration_ms AS ft_duration_ms
+        FROM albums al
+        JOIN album_artists aa ON aa.album_id = al.id
+        JOIN artists ar2 ON ar2.id = al.artist_id
+        LEFT JOIN LATERAL (
+            SELECT t.id, t.title, t.duration_ms
+            FROM tracks t
+            WHERE t.album_id = al.id
+            ORDER BY t.track_number ASC NULLS LAST, t.id ASC
+            LIMIT 1
+        ) ft ON true
+        WHERE aa.artist_id = :artist_id
+          AND al.album_type IN ('single', 'ep')
+        ORDER BY al.year DESC NULLS LAST, al.title ASC
+    """), {"artist_id": artist_id}).fetchall()
+    return [
+        {
+            "id": row.id,
+            "title": row.title,
+            "year": row.year,
+            "cover_art_path": row.cover_art_path,
+            "album_type": row.album_type,
+            "artist_id": row.artist_id,
+            "artist_name": row.artist_name,
+            "first_track": {
+                "id": row.ft_id,
+                "title": row.ft_title,
+                "duration_ms": row.ft_duration_ms,
+                "album_id": row.id,
+                "album_title": row.title,
+                "artist_id": row.artist_id,
+                "artist_name": row.artist_name,
+            } if row.ft_id is not None else None,
         }
         for row in rows
     ]
