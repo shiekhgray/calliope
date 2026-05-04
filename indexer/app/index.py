@@ -17,17 +17,48 @@ ANALYSIS_DURATION = 60
 
 
 def extract_features(file_path: Path) -> np.ndarray:
-    """Return a 38-dim feature vector: 13 MFCC mean + 13 MFCC var + 12 chroma mean."""
+    """Return a 60-dim feature vector.
+
+    Dims  0–12: MFCC mean
+    Dims 13–25: MFCC variance
+    Dims 26–37: chroma mean
+    Dims 38–49: chroma variance
+    Dim  50:    tempo (BPM)
+    Dim  51:    RMS mean
+    Dim  52:    RMS variance
+    Dim  53:    spectral centroid mean
+    Dims 54–59: tonnetz mean
+    """
     y, sr = librosa.load(str(file_path), sr=22050, mono=True, duration=ANALYSIS_DURATION)
 
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=13)
-    mfcc_mean = np.mean(mfcc, axis=1)
-    mfcc_var  = np.var(mfcc, axis=1)
+    mfcc_mean = np.mean(mfcc, axis=1)       # 13  dims 0–12
+    mfcc_var  = np.var(mfcc, axis=1)        # 13  dims 13–25
 
     chroma = librosa.feature.chroma_stft(y=y, sr=sr)
-    chroma_mean = np.mean(chroma, axis=1)
+    chroma_mean = np.mean(chroma, axis=1)   # 12  dims 26–37
+    chroma_var  = np.var(chroma, axis=1)    # 12  dims 38–49
 
-    return np.concatenate([mfcc_mean, mfcc_var, chroma_mean]).astype(np.float32)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    tempo_val = float(np.atleast_1d(tempo)[0])   # 1   dim 50
+
+    rms = librosa.feature.rms(y=y)[0]
+    rms_mean = np.mean(rms)                 # 1   dim 51
+    rms_var  = np.var(rms)                  # 1   dim 52
+
+    centroid = librosa.feature.spectral_centroid(y=y, sr=sr)[0]
+    centroid_mean = np.mean(centroid)       # 1   dim 53
+
+    y_harm = librosa.effects.harmonic(y)
+    tonnetz = librosa.feature.tonnetz(y=y_harm, sr=sr)
+    tonnetz_mean = np.mean(tonnetz, axis=1) # 6   dims 54–59
+
+    return np.concatenate([
+        mfcc_mean, mfcc_var,
+        chroma_mean, chroma_var,
+        [tempo_val], [rms_mean], [rms_var], [centroid_mean],
+        tonnetz_mean,
+    ]).astype(np.float32)
 
 
 def run_indexing(update_status):

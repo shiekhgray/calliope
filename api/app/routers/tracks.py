@@ -110,6 +110,19 @@ def mark_played(
     return {"play_count": track.play_count}
 
 
+DIM_SLICES = {
+    "timbre":            slice(0, 13),
+    "timbral_variation": slice(13, 26),
+    "harmony":           slice(26, 38),
+    "chord_movement":    slice(38, 50),
+    "tempo":             slice(50, 51),
+    "loudness":          slice(51, 52),
+    "dynamic_range":     slice(52, 53),
+    "brightness":        slice(53, 54),
+    "tonal":             slice(54, 60),
+}
+
+
 @router.get("/{track_id}/similar")
 def similar_tracks(
     track_id: int,

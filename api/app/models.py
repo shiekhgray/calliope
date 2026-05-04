@@ -140,7 +140,7 @@ class TrackVector(Base):
     __tablename__ = "track_vectors"
 
     track_id = Column(Integer, ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True)
-    feature_vector = Column(Vector(38), nullable=False)
+    feature_vector = Column(Vector(60), nullable=False)
     file_mtime = Column(BigInteger, nullable=False)
 
     track = relationship("Track")
