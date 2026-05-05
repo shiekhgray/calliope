@@ -1,9 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import api from '../api/client'
 import { usePlayer } from '../player/PlayerContext'
 import { useAuth } from '../auth/AuthContext'
 import { useRegisterFirstTrack } from '../hooks/useSpacebarPlayback'
+import ReleaseCardGenres from '../components/ReleaseCardGenres'
 
 function fmt(ms) {
   if (!ms) return ''
@@ -50,6 +52,46 @@ export default function ArtistPage() {
     },
   })
 
+  const [artistGenrePending, setArtistGenrePending] = useState([])
+  const [artistGenreFetching, setArtistGenreFetching] = useState(false)
+  const [artistGenreApplying, setArtistGenreApplying] = useState(false)
+  const [artistGenreApplyProgress, setArtistGenreApplyProgress] = useState(null) // null | { done, total } | 'done'
+
+  async function handleArtistGenreFetch() {
+    setArtistGenreFetching(true)
+    setArtistGenreApplyProgress(null)
+    try {
+      const r = await api.get(`/artists/${id}/genres/fetch`)
+      setArtistGenrePending(r.data)
+    } finally {
+      setArtistGenreFetching(false)
+    }
+  }
+
+  async function handleApplyAll() {
+    const albumIds = albums.map((a) => a.id)
+    const genres = [...artistGenrePending]
+    const total = albumIds.length
+    setArtistGenreApplying(true)
+    setArtistGenreApplyProgress({ done: 0, total })
+    for (let i = 0; i < albumIds.length; i++) {
+      const albumId = albumIds[i]
+      for (const g of genres) {
+        try {
+          await api.post(`/albums/${albumId}/genres`, { name: g.name })
+        } catch {
+          // ignore duplicates / errors per album
+        }
+      }
+      setArtistGenreApplyProgress({ done: i + 1, total })
+      qc.invalidateQueries({ queryKey: ['album-genres', String(albumId)] })
+    }
+    setArtistGenreApplying(false)
+    setArtistGenreApplyProgress('done')
+    setArtistGenrePending([])
+    setTimeout(() => setArtistGenreApplyProgress(null), 3000)
+  }
+
   useRegisterFirstTrack(() => topTracks[0] ?? null)
 
   if (isLoading) return <div className="loading">Loading…</div>
@@ -58,7 +100,61 @@ export default function ArtistPage() {
 
   return (
     <div className="page">
-      <h2>{artistName}</h2>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, color: 'var(--accent)' }}>{artistName}</h2>
+        {loggedIn && (
+          <button
+            className="genre-controls"
+            style={{ display: 'inline-flex', gap: '0', padding: 0, background: 'none', border: 'none' }}
+            onClick={handleArtistGenreFetch}
+            disabled={artistGenreFetching || artistGenreApplying}
+          >
+            <span style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '6px', padding: '4px 12px', fontSize: '0.8rem', color: 'var(--text)', cursor: 'pointer' }}>
+              {artistGenreFetching ? 'Fetching…' : 'Fetch genres'}
+            </span>
+          </button>
+        )}
+      </div>
+
+      {/* Artist genre pending chips */}
+      {artistGenrePending.length > 0 && (
+        <div className="genre-section" style={{ marginBottom: '16px' }}>
+          <div className="genre-chips">
+            <span className="genre-pending-note">Suggestions — apply to all albums by this artist:</span>
+            {artistGenrePending.map((g) => (
+              <span key={g.name} className="genre-chip-pending">
+                {g.name}
+                {g.weight != null && <span style={{ fontSize: '0.72rem', opacity: 0.6 }}> {g.weight}</span>}
+                <button
+                  className="genre-chip-btn genre-chip-btn--dismiss"
+                  onClick={() => setArtistGenrePending((prev) => prev.filter((x) => x.name !== g.name))}
+                  title="Dismiss"
+                >
+                  ✕
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="genre-controls" style={{ marginTop: 0 }}>
+            <button onClick={handleApplyAll} disabled={artistGenreApplying || artistGenrePending.length === 0}>
+              {artistGenreApplying ? 'Applying…' : 'Apply to all'}
+            </button>
+            {artistGenreApplyProgress && artistGenreApplyProgress !== 'done' && (
+              <span className="genre-apply-progress">
+                Applying to {artistGenreApplyProgress.done}/{artistGenreApplyProgress.total} albums…
+              </span>
+            )}
+            {artistGenreApplyProgress === 'done' && (
+              <span className="genre-apply-done">Done</span>
+            )}
+          </div>
+        </div>
+      )}
+      {artistGenreApplyProgress === 'done' && artistGenrePending.length === 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <span className="genre-apply-done">Genres applied to all albums.</span>
+        </div>
+      )}
 
       <section className="top-tracks">
         <h3 className="section-heading">Top Tracks</h3>
@@ -184,6 +280,7 @@ export default function ArtistPage() {
                   {d.release_date && (
                     <div className="release-card-year">{d.release_date.slice(0, 4)}</div>
                   )}
+                  <ReleaseCardGenres discoveryId={d.id} />
                   {loggedIn && (
                     <button
                       className="release-dismiss-btn"

@@ -1,11 +1,31 @@
+import json
+import logging
+import urllib.error
+import urllib.parse
+import urllib.request
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.database import get_db
 from app import models
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/artists", tags=["artists"])
+
+
+def _fetch_lastfm(url: str) -> dict | None:
+    """Fire a Last.fm API request. Returns parsed JSON or None on failure."""
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Calliope/2.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except Exception as exc:
+        logger.warning("Last.fm request failed: %s", exc)
+        return None
 
 
 @router.get("")
@@ -163,3 +183,43 @@ def top_tracks(
         {"artist_id": artist_id, "limit": limit},
     ).fetchall()
     return [dict(row._mapping) for row in rows]
+
+
+@router.get("/{artist_id}/genres/fetch")
+def fetch_artist_genres_lastfm(artist_id: int, db: Session = Depends(get_db)):
+    """Fetch genre suggestions from Last.fm artist.getTopTags."""
+    artist = db.get(models.Artist, artist_id)
+    if not artist:
+        raise HTTPException(status_code=404, detail="Artist not found")
+
+    if not settings.lastfm_api_key:
+        return []
+
+    encoded_name = urllib.parse.quote(artist.name)
+    url = (
+        f"http://ws.audioscrobbler.com/2.0/"
+        f"?method=artist.getTopTags"
+        f"&api_key={settings.lastfm_api_key}"
+        f"&artist={encoded_name}"
+        f"&format=json"
+    )
+
+    data = _fetch_lastfm(url)
+    if not data:
+        return []
+
+    tags = (data.get("toptags") or {}).get("tag", [])
+    if not isinstance(tags, list):
+        return []
+
+    suggestions = []
+    for tag in tags:
+        name = tag.get("name", "").strip().lower()
+        weight = int(tag.get("count", 0))
+        if not name or weight < 10:
+            continue
+        suggestions.append({"name": name, "source": "lastfm", "weight": weight})
+        if len(suggestions) >= 5:
+            break
+
+    return suggestions

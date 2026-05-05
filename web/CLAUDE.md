@@ -20,10 +20,12 @@ web/src/
     PlayerBar.jsx            ← fixed bottom bar; art thumbnail → /now-playing; ≋ radio toggle
     AddToPlaylistMenu.jsx    ← "+" popover on every track row
     ChangePasswordModal.jsx
+    SimilarityWeightsModal.jsx  ← 3 groups × 3 sliders; PUT /auth/similarity-weights; opened from user menu "Sound Matching"
+    ReleaseCardGenres.jsx       ← "Genres" toggle button + chip display for discovery cards; used in both ReleasesPage and ArtistPage (Missing Releases section)
   pages/
     LibraryPage              ← artist list
-    ArtistPage               ← top 10 tracks + albums grid + "Appears On" (compilations) + Missing Releases
-    AlbumPage                ← album header (art upload overlay) + track table + share links
+    ArtistPage               ← top 10 tracks + albums grid + Singles & EPs section + "Appears On" (compilations) + Missing Releases
+    AlbumPage                ← album header (art upload overlay) + track table + share links; owner-only type-cycle pill (album→ep→single)
     SearchPage               ← search + history chips
     PlaylistsPage            ← list + create/delete
     PlaylistPage             ← detail + remove/reorder tracks
@@ -108,3 +110,6 @@ URL format: `{origin}/calliope/albums/{id}?play={trackId}&note={artist}_{album}`
 | `['search-history']` | Current user's 10 most recent visits |
 | `['scanner-status']` | Polled every 2s during rescan |
 | `['album-artists', albumId]` | Album-level credits — fetched eagerly on every AlbumPage load (after album data arrives); also used by AlbumCreditsSection (owner-only). React Query deduplicates both callers. |
+| `['artist-singles', id]` | Singles & EPs for artist — from GET /artists/{id}/singles |
+| `['me']` | Current user profile + similarity weights — staleTime: Infinity; invalidated on weight save |
+| `['album-genres', albumId]` | Committed genres for an album — invalidated on POST/DELETE genre |

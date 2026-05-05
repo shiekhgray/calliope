@@ -13,23 +13,29 @@ Plain Python stdlib `http.server` — no FastAPI, no external HTTP framework. Th
 
 The API scanner router (`api/app/routers/scanner.py`) calls this after scan.py completes (phase 2 of the two-phase rescan).
 
-## Feature Vector: 38 Dimensions
+## Feature Vector: 60 Dimensions
 
 | Dims | Feature | Librosa call |
 |---|---|---|
 | 0–12 | MFCC mean | `mfcc.mean(axis=1)` |
 | 13–25 | MFCC variance | `mfcc.var(axis=1)` |
 | 26–37 | Chroma mean | `chroma_stft.mean(axis=1)` |
+| 38–49 | Chroma variance | `chroma_stft.var(axis=1)` |
+| 50 | Tempo | `librosa.beat.beat_track()` → `np.atleast_1d(tempo)[0]` |
+| 51 | RMS mean | `rms.mean()` |
+| 52 | RMS variance | `rms.var()` |
+| 53 | Spectral centroid mean | `spectral_centroid.mean()` |
+| 54–59 | Tonnetz mean | `librosa.feature.tonnetz(y=librosa.effects.harmonic(y))` |
 
-Analysis window: first 60s of each file at 22050 Hz mono. Fast enough in practice (~hundreds of tracks per minute).
+Analysis window: first 60s of each file at 22050 Hz mono. `librosa.effects.harmonic(y)` applied before tonnetz to improve accuracy on percussive tracks.
 
-**Vector expansion planned** (`prd/vector-expansion.md`): 38→60 dims, adding chroma variance, tempo, RMS, spectral centroid, tonnetz. Breaking migration — requires truncating track_vectors and full re-index.
+Expanded from 38→60 dims via migration 0010 (breaking: track_vectors truncated, full re-index required).
 
 ## Database Tables
 
 ```
-track_vectors      track_id (PK FK→tracks), feature_vector vector(38), file_mtime bigint
-vector_norm_params id (always 1), means float[38], stds float[38], updated_at
+track_vectors      track_id (PK FK→tracks), feature_vector vector(60), file_mtime bigint
+vector_norm_params id (always 1), means float[60], stds float[60], updated_at
 ```
 
 HNSW cosine index on `track_vectors(feature_vector)` — created in migration 0006. Currently unused at query time (API does brute-force numpy); forward-looking for when the library grows.
@@ -58,6 +64,7 @@ Returns 404 if the query track has no vector yet.
 
 ## Gotchas
 
+- **`indexer/app/models.py` must match the DB column dimension.** After migration 0010 changed `track_vectors.feature_vector` to `vector(60)`, the indexer model still declared `Vector(38)`. The pgvector Python client validates client-side before inserting, so every insert failed silently. Fix: update `models.py`, rebuild the indexer container. If you expand dimensions again, update both the migration AND `indexer/app/models.py`.
 - `librosa` is a heavy import (scipy/scikit-learn). It is imported inside `index.py` only — never at API startup. Keep it this way.
 - MFCC coefficient 0 tracks overall loudness and would dominate cosine similarity without normalization. Normalization is non-negotiable.
 - WAV files sometimes have unreliable sample rates. Loading at `sr=22050` (fixed resample) avoids issues.

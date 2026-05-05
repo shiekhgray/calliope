@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
+import ReleaseCardGenres from '../components/ReleaseCardGenres'
 
 function useRefreshPoller(onDone) {
   const pollRef = useRef(null)
@@ -184,6 +185,7 @@ export default function ReleasesPage() {
                   {d.release_date.slice(0, 4)}
                 </div>
               )}
+              <ReleaseCardGenres discoveryId={d.id} />
               <button
                 className="release-dismiss-btn"
                 onClick={() => dismissMutation.mutate(d.id)}

@@ -269,6 +269,198 @@ function AlbumCreditsSection({ albumId, isOwner }) {
   )
 }
 
+// Genre add input with autocomplete
+function GenreAddInput({ albumId, onAdded }) {
+  const [value, setValue] = useState('')
+  const [suggestions, setSuggestions] = useState([])
+  const [submitting, setSubmitting] = useState(false)
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    if (!value.trim()) { setSuggestions([]); return }
+    const t = setTimeout(() => {
+      api.get('/genres', { params: { q: value.trim() } })
+        .then((r) => setSuggestions(r.data))
+        .catch(() => setSuggestions([]))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [value])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handle(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setSuggestions([])
+    }
+    document.addEventListener('mousedown', handle)
+    return () => document.removeEventListener('mousedown', handle)
+  }, [])
+
+  async function submit(name) {
+    const n = (name ?? value).trim()
+    if (!n) return
+    setSubmitting(true)
+    try {
+      await api.post(`/albums/${albumId}/genres`, { name: n })
+      onAdded()
+      setValue('')
+      setSuggestions([])
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="genre-add-wrap" ref={wrapRef}>
+      <input
+        placeholder="Add genre…"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') submit() }}
+        disabled={submitting}
+      />
+      {suggestions.length > 0 && (
+        <div className="genre-autocomplete">
+          {suggestions.map((g) => (
+            <button
+              key={g.id}
+              className="genre-autocomplete-item"
+              onMouseDown={(e) => { e.preventDefault(); submit(g.name) }}
+            >
+              {g.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Genre section: committed chips + pending suggestions + controls
+function AlbumGenreSection({ albumId }) {
+  const { loggedIn } = useAuth()
+  const queryClient = useQueryClient()
+  const [pending, setPending] = useState([])
+  const [fetching, setFetching] = useState(false)
+  const [suggesting, setSuggesting] = useState(false)
+  const [fetchError, setFetchError] = useState(null)
+
+  const { data: committed = [] } = useQuery({
+    queryKey: ['album-genres', albumId],
+    queryFn: () => api.get(`/albums/${albumId}/genres`).then((r) => r.data),
+  })
+
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['album-genres', albumId] })
+  }
+
+  async function removeGenre(genreId) {
+    await api.delete(`/albums/${albumId}/genres/${genreId}`)
+    invalidate()
+  }
+
+  async function acceptPending(name) {
+    await api.post(`/albums/${albumId}/genres`, { name })
+    setPending((prev) => prev.filter((g) => g.name !== name))
+    invalidate()
+  }
+
+  function dismissPending(name) {
+    setPending((prev) => prev.filter((g) => g.name !== name))
+  }
+
+  async function handleFetch() {
+    setFetching(true)
+    setFetchError(null)
+    try {
+      const r = await api.get(`/albums/${albumId}/genres/fetch`)
+      setPending(r.data)
+    } catch {
+      setFetchError('Fetch failed.')
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  async function handleSuggest() {
+    setSuggesting(true)
+    setFetchError(null)
+    try {
+      const r = await api.get(`/albums/${albumId}/genres/suggest`)
+      setPending(r.data)
+    } catch {
+      setFetchError('Suggest failed.')
+    } finally {
+      setSuggesting(false)
+    }
+  }
+
+  return (
+    <div className="genre-section">
+      {/* Committed genres row */}
+      {(committed.length > 0 || loggedIn) && (
+        <div className="genre-chips">
+          {committed.map((g) => (
+            <span key={g.id} className="genre-chip">
+              {g.name}
+              {loggedIn && (
+                <button
+                  className="genre-chip-btn genre-chip-btn--dismiss"
+                  onClick={() => removeGenre(g.id)}
+                  title="Remove genre"
+                >
+                  ✕
+                </button>
+              )}
+            </span>
+          ))}
+          {committed.length === 0 && <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>No genres yet</span>}
+        </div>
+      )}
+
+      {/* Pending suggestions row */}
+      {pending.length > 0 && (
+        <div className="genre-chips">
+          <span className="genre-pending-note">Suggestions:</span>
+          {pending.map((g) => (
+            <span key={g.name} className="genre-chip-pending">
+              {g.name}
+              {g.weight != null && <span style={{ fontSize: '0.72rem', opacity: 0.6 }}> {g.weight}</span>}
+              <button
+                className="genre-chip-btn genre-chip-btn--accept"
+                onClick={() => acceptPending(g.name)}
+                title="Accept"
+              >
+                ✓
+              </button>
+              <button
+                className="genre-chip-btn genre-chip-btn--dismiss"
+                onClick={() => dismissPending(g.name)}
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Controls — only when logged in */}
+      {loggedIn && (
+        <div className="genre-controls">
+          <button onClick={handleFetch} disabled={fetching || suggesting}>
+            {fetching ? 'Fetching…' : 'Fetch'}
+          </button>
+          <button onClick={handleSuggest} disabled={fetching || suggesting}>
+            {suggesting ? 'Suggesting…' : 'Suggest'}
+          </button>
+          <GenreAddInput albumId={albumId} onAdded={invalidate} />
+          {fetchError && <span className="error">{fetchError}</span>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function fmt(ms) {
   if (!ms) return ''
   const s = Math.round(ms / 1000)
@@ -419,6 +611,8 @@ export default function AlbumPage() {
           <AlbumCreditsSection albumId={id} isOwner={isOwner} />
         </div>
       </div>
+
+      <AlbumGenreSection albumId={id} />
 
       <table className="track-table">
         <tbody>

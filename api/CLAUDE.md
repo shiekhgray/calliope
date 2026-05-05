@@ -10,15 +10,15 @@ docker compose exec api alembic upgrade head
 
 | File | Endpoints |
 |---|---|
-| `auth.py` | POST /auth/login (OAuth2 form), /auth/refresh, GET /auth/me, POST /auth/change-password |
-| `artists.py` | GET /artists (excludes VA), /artists/{id}/albums, /artists/{id}/top-tracks?limit=N (default 25, uses album_artists join), /artists/{id}/compilations |
-| `albums.py` | GET /albums/{id}, /albums/{id}/art, PUT /albums/{id}/art (multipart, writes Folder.jpg) |
-| `tracks.py` | GET /tracks?sort=play_count&limit=N (auth, default 50), GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar |
-| `genres.py` | GET /genres (accepts `?q=` for autocomplete filter) |
+| `auth.py` | POST /auth/login (OAuth2 form), /auth/refresh, GET /auth/me, POST /auth/change-password, PUT /auth/similarity-weights (partial update, 0–10 per field) |
+| `artists.py` | GET /artists (excludes VA), /artists/{id}/albums (album_type='album' only), /artists/{id}/singles (album_type IN ('single','ep'), includes first_track), /artists/{id}/top-tracks?limit=N (default 25, uses album_artists join), /artists/{id}/compilations, /artists/{id}/genres/fetch (Last.fm artist.getTopTags) |
+| `albums.py` | GET /albums/{id} (includes album_type), /albums/{id}/art, PUT /albums/{id}/art (multipart, writes Folder.jpg), PATCH /albums/{id}/type (owner-only, validates album/ep/single); GET /albums/{id}/genres, GET /albums/{id}/genres/fetch (Last.fm), GET /albums/{id}/genres/suggest (similarity k-NN), POST /albums/{id}/genres (auth, both users), DELETE /albums/{id}/genres/{genre_id} (auth, both users) |
+| `tracks.py` | GET /tracks?sort=play_count&limit=N (auth, default 50), GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar (applies per-user sim_weight_* via DIM_SLICES) |
+| `genres.py` | GET /genres (accepts `?q=` for autocomplete filter, limit 20 when q set) |
 | `search.py` | GET /search?q= (unaccent), GET/POST /search/history (auth; upsert + prune to 10) |
 | `playlists.py` | Full CRUD + add/remove/reorder tracks |
 | `scanner.py` | POST /scanner/trigger (auth, 409 if running), GET /scanner/status — two phases: scan + index |
-| `discover.py` | POST /discover/refresh, GET /discover/status, GET /discover(?artist_id=), POST /discover/{id}/dismiss |
+| `discover.py` | POST /discover/refresh, GET /discover/status, GET /discover(?artist_id=), POST /discover/{id}/dismiss, GET /discover/{id}/genres/fetch (Last.fm album.getInfo; read-only, nothing persisted) |
 | `compilations.py` | GET /compilations |
 | `import_music.py` | POST /import/upload (auth; Bandcamp + Amazon zip detection + extraction) |
 | `credits.py` | GET /albums/{id}/artists, POST /albums/{id}/artists, DELETE /albums/{id}/artists/{artist_id}, POST /tracks/{id}/credits, DELETE /tracks/{id}/credits/{artist_id} — all mutating endpoints owner-only (user_id == 1) |
@@ -42,7 +42,7 @@ Script must live at `api/scripts/scan.py` (inside the Docker build context). Mov
 
 ## Migrations
 
-Applied: **0001–0008**. Next number: **0009**.
+Applied: **0001–0011**. Next number: **0012**.
 
 | File | Change |
 |---|---|
@@ -54,6 +54,9 @@ Applied: **0001–0008**. Next number: **0009**.
 | 0006_add_pgvector | vector extension, `track_vectors`, `vector_norm_params`, HNSW index |
 | 0007_add_track_artist | `track_artist` + `track_artist_id` on `tracks` |
 | 0008_track_credits | `album_artists (album_id, artist_id)`, `track_credits (track_id, artist_id)`; backfill from existing `track_artist_id`; drop `track_artist` + `track_artist_id` |
+| 0009_add_album_type | `album_type VARCHAR(8) NOT NULL DEFAULT 'album'` on `albums` |
+| 0010_vector_expansion | Drops HNSW, truncates `track_vectors` + `vector_norm_params`, alters `feature_vector` to `vector(60)`, recreates HNSW |
+| 0011_add_similarity_weights | 9 `sim_weight_*` columns on `users` (INTEGER NOT NULL DEFAULT 5): timbre, timbral_variation, harmony, chord_movement, tempo, loudness, dynamic_range, brightness, tonal |
 
 Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overridden at runtime via `env.py`. Do not add a value there.
 
@@ -66,7 +69,19 @@ Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overr
 
 ## Similarity Query
 
-`GET /tracks/{id}/similar` is brute-force numpy (not pgvector ANN): fetches all vectors, z-score normalizes, L2-normalizes, dot-product. Fast enough at ~3k tracks. HNSW index exists for future use.
+`GET /tracks/{id}/similar` is brute-force numpy (not pgvector ANN): fetches all vectors, z-score normalizes, applies per-user `sim_weight_*` scaling via `DIM_SLICES` (weights/5.0 multiplier), L2-normalizes, dot-product. Fast enough at ~3k tracks. HNSW index exists for future use.
+
+`DIM_SLICES` in `tracks.py` maps 9 named groups to slice objects covering all 60 dimensions:
+- `timbre` (0–12), `timbral_variation` (13–25), `harmony` (26–37), `chord_movement` (38–49)
+- `tempo` (50), `loudness` (51), `dynamic_range` (52), `brightness` (53), `tonal` (54–59)
+
+## Genre Tagging
+
+`GET /albums/{id}/genres/fetch` and `GET /artists/{id}/genres/fetch` call Last.fm. `LASTFM_API_KEY` is read from `.env` via `config.py`. If the key is empty or Last.fm returns no match, these endpoints return `[]` — no error. Add `LASTFM_API_KEY=your_key` to `api/.env` to enable.
+
+Genre writes (`POST /albums/{id}/genres`) normalize to lowercase before upsert. Both authenticated users (not owner-only) can tag — deliberate, see PRD.
+
+`GET /albums/{id}/genres/suggest` reuses the same z-score + L2-normalize pipeline as `/tracks/{id}/similar` but lives in `albums.py`, not `tracks.py`. It has its own copy of `DIM_SLICES` (same values).
 
 ## Search
 

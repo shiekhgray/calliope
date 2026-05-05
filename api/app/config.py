@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
 
+    lastfm_api_key: str = ""
+
     class Config:
         env_file = ".env"
 
