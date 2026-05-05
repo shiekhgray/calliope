@@ -538,3 +538,77 @@ tr:hover .track-credits-row .credit-add-btn { opacity: 1; }
 .sim-weight-value { font-size: 0.85rem; color: var(--text-dim); width: 16px; text-align: right; }
 .sim-weights-reset { background: none; border: none; color: var(--text-dim); font-size: 0.8rem; cursor: pointer; text-decoration: underline; margin-right: auto; }
 .sim-weights-reset:hover { color: var(--text); }
+
+/* ── Playlist similar tracks ── */
+.similar-tracks-section { margin-top: 36px; }
+
+.similar-track-skeleton td { opacity: 0.5; }
+.similar-skeleton-title {
+  display: inline-block; width: 180px; height: 0.85em;
+  background: var(--surface2); border-radius: 4px; vertical-align: middle;
+}
+.similar-skeleton-meta {
+  display: inline-block; width: 120px; height: 0.75em;
+  background: var(--surface2); border-radius: 4px; vertical-align: middle;
+}
+
+.similar-track-add-cell { width: 64px; text-align: right; }
+.similar-add-btn {
+  font-size: 0.75rem; padding: 3px 9px; border-radius: 5px;
+  border: 1px solid var(--border); color: var(--text-dim);
+  background: none; white-space: nowrap;
+}
+.similar-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Genre tagging ── */
+.genre-section { margin-bottom: 20px; display: flex; flex-direction: column; gap: 8px; }
+.genre-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.genre-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--surface2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 3px 10px; font-size: 0.8rem;
+}
+.genre-chip-pending {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: transparent; color: var(--text-dim);
+  border: 1px solid var(--border); border-radius: 12px;
+  padding: 3px 10px; font-size: 0.8rem;
+}
+.genre-chip-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 0.85rem; line-height: 1; padding: 0 1px;
+}
+.genre-chip-btn--accept { color: var(--accent); }
+.genre-chip-btn--accept:hover { color: var(--accent-hover); }
+.genre-chip-btn--dismiss { color: var(--text-dim); }
+.genre-chip-btn--dismiss:hover { color: var(--text); }
+.genre-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+.genre-controls button {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 12px; font-size: 0.8rem; color: var(--text);
+}
+.genre-controls button:hover { border-color: var(--accent); color: var(--accent); }
+.genre-controls button:disabled { opacity: 0.5; cursor: default; }
+.genre-add-wrap { position: relative; display: inline-block; }
+.genre-add-wrap input {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 10px; font-size: 0.8rem; color: var(--text);
+  width: 160px; outline: none;
+}
+.genre-add-wrap input:focus { border-color: var(--accent); }
+.genre-autocomplete {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 200;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 8px; min-width: 160px; max-height: 180px; overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.genre-autocomplete-item {
+  display: block; width: 100%; text-align: left;
+  padding: 6px 12px; font-size: 0.82rem; color: var(--text);
+  background: none; border: none; cursor: pointer;
+}
+.genre-autocomplete-item:hover { background: var(--border); color: var(--accent); }
+.genre-pending-note { font-size: 0.78rem; color: var(--text-dim); }
+.genre-apply-progress { font-size: 0.8rem; color: var(--text-dim); }
+.genre-apply-done { font-size: 0.8rem; color: var(--accent); }

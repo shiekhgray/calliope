@@ -6,6 +6,8 @@ import { usePlayer } from '../player/PlayerContext'
 import { useRegisterFirstTrack } from '../hooks/useSpacebarPlayback'
 import AddToPlaylistMenu from '../components/AddToPlaylistMenu'
 
+const SKELETON_COUNT = 10
+
 function fmt(ms) {
   if (!ms) return ''
   const s = Math.round(ms / 1000)
@@ -42,6 +44,15 @@ export default function PlaylistPage() {
     onSuccess: () => {
       setLocalTracks(null)
       qc.invalidateQueries({ queryKey: ['playlist', id] })
+      qc.invalidateQueries({ queryKey: ['playlist-similar', id] })
+    },
+  })
+
+  const addSimilarTrackMutation = useMutation({
+    mutationFn: (trackId) => api.post(`/playlists/${id}/tracks`, { track_id: trackId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['playlist', id] })
+      qc.invalidateQueries({ queryKey: ['playlist-similar', id] })
     },
   })
 
@@ -51,6 +62,14 @@ export default function PlaylistPage() {
       setLocalTracks(null)
       qc.invalidateQueries({ queryKey: ['playlist', id] })
     },
+  })
+
+  const { data: similarTracks = [], isFetching: similarFetching } = useQuery({
+    queryKey: ['playlist-similar', id],
+    queryFn: () => api.get(`/playlists/${id}/similar`).then((r) => r.data),
+    enabled: (playlist?.entries?.length ?? 0) > 0,
+    staleTime: 30_000,
+    retry: 1,
   })
 
   useRegisterFirstTrack(() => {
@@ -177,6 +196,64 @@ export default function PlaylistPage() {
             </tbody>
           </table>
         </>
+      )}
+
+      {/* ── Similar Tracks ── */}
+      {(similarFetching || similarTracks.length > 0) && tracks.length > 0 && (
+        <div className="similar-tracks-section">
+          <div className="section-heading">Similar Tracks</div>
+          <table className="track-table">
+            <tbody>
+              {similarFetching && similarTracks.length === 0
+                ? Array.from({ length: SKELETON_COUNT }).map((_, i) => (
+                    <tr key={`skel-${i}`} className="similar-track-skeleton">
+                      <td className="track-name">
+                        <span className="track-play-btn" />
+                        <span className="similar-skeleton-title" />
+                      </td>
+                      <td className="track-meta-dim">
+                        <span className="similar-skeleton-meta" />
+                      </td>
+                      <td className="similar-track-add-cell" />
+                    </tr>
+                  ))
+                : similarTracks.map((track) => {
+                    const active = currentTrack?.id === track.id
+                    return (
+                      <tr key={track.id} className={active ? 'active' : ''}>
+                        <td className="track-name">
+                          <button
+                            className="track-play-btn"
+                            style={{ color: 'var(--accent)' }}
+                            onClick={() => playTrack(track, [track])}
+                            title="Play"
+                          >
+                            {active && isPlaying ? '⏸' : '▶'}
+                          </button>
+                          {track.title}
+                        </td>
+                        <td className="track-meta-dim">
+                          {track.artist_name}
+                          {track.album_title && (
+                            <> · {track.album_title}</>
+                          )}
+                        </td>
+                        <td className="similar-track-add-cell">
+                          <button
+                            className="similar-add-btn"
+                            onClick={() => addSimilarTrackMutation.mutate(track.id)}
+                            title="Add to playlist"
+                          >
+                            + Add
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })
+              }
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

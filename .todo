@@ -42,12 +42,13 @@
         add signingConfigs block to app/build.gradle.kts; run ./gradlew assembleRelease
 
 ## Up Next
-- [ ] [Singles & EPs](prd/singles.md) — design done; needs migration 0009, API, AlbumPage type-cycle pill, ArtistPage section
-- [ ] Genre Tagging
+- [x] [Singles & EPs](prd/singles.md) — migration 0009 applied; album_type column; PATCH /albums/{id}/type; GET /artists/{id}/singles; AlbumPage type-cycle pill; ArtistPage Singles & EPs section
+- [x] Vector Expansion — migration 0010 applied; 38→60 dims (chroma var, tempo, RMS, spectral centroid, tonnetz); indexer re-indexes incrementally; track_vectors cleared + re-indexed
+- [x] Similarity Weights — migration 0011 applied; 9 sim_weight_* columns on users (default 5); PUT /auth/similarity-weights; DIM_SLICES weight application in /tracks/{id}/similar; SimilarityWeightsModal in web; "Sound Matching" in user menu
+- [x] Genre Tagging — all API endpoints + web UI shipped; LASTFM_API_KEY must be added to api/.env to enable Last.fm fetch (currently returns [] gracefully without it)
 - [ ] Playlist Permissions
 - [ ] Playlist Cards
-- [ ] Vector Expansion
-- [ ] Similarity Weights
+- [ ] [Playlist Similar Tracks](prd/playlist-similar.md) — "Similar Tracks" section at bottom of playlist; centroid of last 10 seeds; play + add actions; live updates
 
 ## Later
 - [ ] [Android Auto](prd/android-auto.md) — full browse tree, radio mode, offline playback
