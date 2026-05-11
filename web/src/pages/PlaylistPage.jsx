@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import api from '../api/client'
 import { usePlayer } from '../player/PlayerContext'
 import { useRegisterFirstTrack } from '../hooks/useSpacebarPlayback'
@@ -177,6 +177,15 @@ export default function PlaylistPage() {
                         {active && isPlaying ? '⏸' : '▶'}
                       </button>
                       {track.title}
+                    </td>
+                    <td className="track-meta-dim">
+                      {track.artist_id && (
+                        <Link className="player-link" to={`/artists/${track.artist_id}`}>{track.artist_name}</Link>
+                      )}
+                      {track.artist_id && track.album_id && <> · </>}
+                      {track.album_id && (
+                        <Link className="player-link" to={`/albums/${track.album_id}`}>{track.album_title}</Link>
+                      )}
                     </td>
                     <td className="track-duration">{fmt(track.duration_ms)}</td>
                     <td className="track-bitrate">{track.bitrate_kbps ? `${track.bitrate_kbps} kbps` : ''}</td>
