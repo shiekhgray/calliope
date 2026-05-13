@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useRef } from 'react'
+import { createContext, useContext, useState, useRef, useEffect } from 'react'
 import api from '../api/client'
 
 const PlayerContext = createContext(null)
@@ -6,12 +6,32 @@ const PlayerContext = createContext(null)
 // Single Audio element for the lifetime of the app
 const audio = new Audio()
 
+const STORAGE_KEY = 'calliope-player-state'
+
+function saveState(track, queue, queueIndex) {
+  if (!track) return
+  try {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+      track, queue, queueIndex, progress: audio.currentTime,
+    }))
+  } catch {}
+}
+
+function loadSavedState() {
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch { return null }
+}
+
 export function PlayerProvider({ children }) {
-  const [currentTrack, setCurrentTrack] = useState(null)
-  const [queue, setQueue] = useState([])
-  const [queueIndex, setQueueIndex] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(null)
-  const [progress, setProgress] = useState(0)   // seconds
+  const saved = useRef(loadSavedState())
+
+  const [currentTrack, setCurrentTrack] = useState(saved.current?.track ?? null)
+  const [queue, setQueue] = useState(saved.current?.queue ?? [])
+  const [queueIndex, setQueueIndex] = useState(saved.current?.queueIndex ?? 0)
+  const [isPlaying, setIsPlaying] = useState(saved.current?.track ? false : null)
+  const [progress, setProgress] = useState(saved.current?.progress ?? 0)
   const [duration, setDuration] = useState(0)   // seconds
   const [volume, setVolumeState] = useState(1)  // 0–1
 
@@ -29,13 +49,45 @@ export function PlayerProvider({ children }) {
   // _extendWithRadio) can read current values without closures or nested setState
   // calls. Nested setState inside an updater double-fires under React StrictMode,
   // causing queueIndex to increment by 2 and every other track to be skipped.
-  const queueRef = useRef([])
-  const queueIndexRef = useRef(0)
-  const currentTrackRef = useRef(null)
+  const queueRef = useRef(saved.current?.queue ?? [])
+  const queueIndexRef = useRef(saved.current?.queueIndex ?? 0)
+  const currentTrackRef = useRef(saved.current?.track ?? null)
 
   function _setQueue(q) { queueRef.current = q; setQueue(q) }
   function _setQueueIndex(i) { queueIndexRef.current = i; setQueueIndex(i) }
   function _setCurrentTrack(t) { currentTrackRef.current = t; setCurrentTrack(t) }
+
+  // Restore audio src from saved state (seek after metadata loads; don't autoplay)
+  useEffect(() => {
+    const s = saved.current
+    if (!s?.track) return
+    audio.src = `/calliope/api/tracks/${s.track.id}/stream`
+    audio.load()
+    const onMeta = () => { audio.currentTime = s.progress ?? 0 }
+    audio.addEventListener('loadedmetadata', onMeta, { once: true })
+  }, [])
+
+  // Save state when tab is hidden (before Chrome may discard it)
+  useEffect(() => {
+    const onHide = () => saveState(currentTrackRef.current, queueRef.current, queueIndexRef.current)
+    window.addEventListener('pagehide', onHide)
+    document.addEventListener('visibilitychange', onHide)
+    return () => {
+      window.removeEventListener('pagehide', onHide)
+      document.removeEventListener('visibilitychange', onHide)
+    }
+  }, [])
+
+  // Hold a Web Lock so Chrome deprioritises this tab for discard
+  useEffect(() => {
+    if (!navigator.locks) return
+    let released = false
+    navigator.locks.request('calliope-player', { mode: 'exclusive' }, () => new Promise(resolve => {
+      // resolved only on unmount — keeps the lock for the app's lifetime
+      const interval = setInterval(() => { if (released) { clearInterval(interval); resolve() } }, 1000)
+    }))
+    return () => { released = true }
+  }, [])
 
   audio.ontimeupdate = () => setProgress(audio.currentTime)
   audio.ondurationchange = () => setDuration(audio.duration || 0)
@@ -86,6 +138,8 @@ export function PlayerProvider({ children }) {
   }
 
   function playTrack(track, trackList = []) {
+    sessionStorage.removeItem(STORAGE_KEY)
+    saved.current = null
     // Reset session tracking and history on every manual play
     sessionPlayedRef.current = new Set([track.id])
     setHistory([])
