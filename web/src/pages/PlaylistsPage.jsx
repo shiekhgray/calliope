@@ -4,6 +4,47 @@ import { Link } from 'react-router-dom'
 import api from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 
+function PlaylistCard({ pl, userId, onDelete }) {
+  return (
+    <Link className="playlist-card" to={`/playlists/${pl.id}`}>
+      <div className="playlist-card-art">
+        {pl.art_tracks.map((at) => (
+          <img
+            key={at.track_id}
+            src={`/calliope/api/albums/${at.album_id}/art`}
+            alt=""
+            onError={(e) => { e.currentTarget.style.display = 'none' }}
+          />
+        ))}
+      </div>
+      <div className="playlist-card-text">
+        <div className="playlist-card-title">{pl.title}</div>
+        {pl.preview_tracks.length > 0 && (
+          <div className="playlist-card-tracks">
+            {pl.preview_tracks.join(' · ')}
+          </div>
+        )}
+        {pl.top_genres.length > 0 && (
+          <div className="playlist-card-genres">
+            {pl.top_genres.map((g) => (
+              <span key={g} className="genre-chip">{g}</span>
+            ))}
+          </div>
+        )}
+      </div>
+      {pl.owner_id === userId && (
+        <button
+          className="playlist-card-delete"
+          title="Delete"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDelete(pl.id) }}
+        >
+          ✕
+        </button>
+      )}
+    </Link>
+  )
+}
+
 export default function PlaylistsPage() {
   const qc = useQueryClient()
   const { userId } = useAuth()
@@ -61,22 +102,16 @@ export default function PlaylistsPage() {
       {playlists.length === 0 ? (
         <p className="empty">No playlists yet.</p>
       ) : (
-        <ul className="playlist-list">
+        <div className="playlist-cards">
           {playlists.map((pl) => (
-            <li key={pl.id} className="playlist-item">
-              <Link to={`/playlists/${pl.id}`}>{pl.title}</Link>
-              {pl.owner_id === userId && (
-                <button
-                  className="delete-btn"
-                  onClick={() => deleteMutation.mutate(pl.id)}
-                  title="Delete"
-                >
-                  ✕
-                </button>
-              )}
-            </li>
+            <PlaylistCard
+              key={pl.id}
+              pl={pl}
+              userId={userId}
+              onDelete={(id) => deleteMutation.mutate(id)}
+            />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   )

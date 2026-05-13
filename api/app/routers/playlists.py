@@ -1,4 +1,5 @@
 import numpy as np
+from collections import Counter
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text, delete
@@ -91,6 +92,95 @@ def _playlist_detail(pl: models.Playlist) -> dict:
     return d
 
 
+def _quintessential_art_tracks(
+    pl: models.Playlist, db: Session, norm_params, n: int = 4
+) -> list:
+    entries = pl.entries
+    track_ids = [e.track_id for e in entries]
+    if not track_ids:
+        return []
+
+    vectors = {
+        tv.track_id: np.array(tv.feature_vector, dtype=np.float32)
+        for tv in db.query(models.TrackVector)
+                     .filter(models.TrackVector.track_id.in_(track_ids))
+                     .all()
+    }
+
+    art_map = {}
+    for entry in entries:
+        t = entry.track
+        cap = t.album.cover_art_path if t.album else None
+        artist_id = t.album.artist_id if t.album else None
+        art_map[t.id] = (t.album_id, artist_id, cap)
+
+    ranked_ids = []
+    if vectors:
+        vids = list(vectors.keys())
+        matrix = np.array([vectors[tid] for tid in vids], dtype=np.float32)
+
+        if norm_params:
+            means = np.array(norm_params.means, dtype=np.float32)
+            stds = np.array(norm_params.stds, dtype=np.float32)
+            stds[stds == 0] = 1.0
+            matrix = (matrix - means) / stds
+
+        row_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+        row_norms[row_norms == 0] = 1.0
+        matrix /= row_norms
+
+        centroid = matrix.mean(axis=0)
+        c_norm = np.linalg.norm(centroid)
+        if c_norm > 0:
+            centroid /= c_norm
+
+        sims = matrix @ centroid
+        order = np.argsort(sims)[::-1]
+        ranked_ids = [vids[i] for i in order]
+
+    unvectorized = [tid for tid in track_ids if tid not in vectors]
+    candidate_ids = ranked_ids + unvectorized
+
+    # Pass 1: one album per artist for maximum diversity
+    selected = []
+    seen_artists = set()
+    for tid in candidate_ids:
+        if len(selected) >= n:
+            break
+        album_id, artist_id, cap = art_map.get(tid, (None, None, None))
+        if not cap or artist_id in seen_artists:
+            continue
+        seen_artists.add(artist_id)
+        selected.append({"track_id": tid, "album_id": album_id, "cover_art_path": cap})
+
+    # Pass 2: fill remaining slots with unique albums (allows a second album per artist)
+    if len(selected) < n:
+        seen_albums = {s["album_id"] for s in selected}
+        for tid in candidate_ids:
+            if len(selected) >= n:
+                break
+            album_id, artist_id, cap = art_map.get(tid, (None, None, None))
+            if not cap or album_id in seen_albums:
+                continue
+            seen_albums.add(album_id)
+            selected.append({"track_id": tid, "album_id": album_id, "cover_art_path": cap})
+
+    return selected
+
+
+def _playlist_card(pl: models.Playlist, db: Session, norm_params) -> dict:
+    d = _playlist_summary(pl)
+    d["track_count"] = len(pl.entries)
+    d["art_tracks"] = _quintessential_art_tracks(pl, db, norm_params)
+    d["preview_tracks"] = [e.track.title for e in pl.entries[:3]]
+    genre_counter: Counter = Counter()
+    for entry in pl.entries:
+        for genre in entry.track.genres:
+            genre_counter[genre.name] += 1
+    d["top_genres"] = [name for name, _ in genre_counter.most_common(4)]
+    return d
+
+
 # ---------------------------------------------------------------------------
 # Pydantic models
 # ---------------------------------------------------------------------------
@@ -158,8 +248,9 @@ def list_playlists(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
+    norm_params = db.get(models.VectorNormParams, 1)
     all_playlists = db.query(models.Playlist).order_by(models.Playlist.created_at).all()
-    return [_playlist_summary(pl) for pl in all_playlists if can_view(current_user, pl)]
+    return [_playlist_card(pl, db, norm_params) for pl in all_playlists if can_view(current_user, pl)]
 
 
 @router.get("/{playlist_id}")

@@ -687,3 +687,64 @@ tr:hover .track-credits-row .credit-add-btn { opacity: 1; }
   display: flex;
   justify-content: flex-end;
 }
+
+/* ── Playlist cards ── */
+.playlist-cards { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+
+.playlist-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: var(--surface2);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+.playlist-card:hover { background: var(--surface3); }
+
+.playlist-card-art {
+  display: grid;
+  grid-template-columns: 60px 60px;
+  grid-template-rows: 60px 60px;
+  gap: 2px;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--surface3);
+}
+.playlist-card-art img { width: 60px; height: 60px; object-fit: cover; display: block; }
+
+.playlist-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.playlist-card-title { font-weight: 500; color: var(--text1); }
+.playlist-card-tracks {
+  font-size: 0.8rem;
+  color: var(--text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.playlist-card-genres { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+
+.playlist-card-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  background: none;
+  border: none;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+}
+.playlist-card:hover .playlist-card-delete { opacity: 1; }
