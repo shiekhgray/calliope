@@ -16,7 +16,8 @@ docker compose exec api alembic upgrade head
 | `tracks.py` | GET /tracks?sort=play_count&limit=N (auth, default 50), GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar (applies per-user sim_weight_* via DIM_SLICES) |
 | `genres.py` | GET /genres (accepts `?q=` for autocomplete filter, limit 20 when q set) |
 | `search.py` | GET /search?q= (unaccent), GET/POST /search/history (auth; upsert + prune to 10) |
-| `playlists.py` | Full CRUD + add/remove/reorder tracks |
+| `playlists.py` | Full CRUD + add/remove/reorder tracks + similar; all endpoints require auth; GET /playlists and GET /playlists/{id} gate by can_view; track mutations gate by can_edit; DELETE is owner-only; responses include view_mode, edit_mode, viewer_ids, editor_ids, owner_id |
+| `users.py` | GET /users (auth required) — returns [{id, username}] for all users |
 | `scanner.py` | POST /scanner/trigger (auth, 409 if running), GET /scanner/status — two phases: scan + index |
 | `discover.py` | POST /discover/refresh, GET /discover/status, GET /discover(?artist_id=), POST /discover/{id}/dismiss, GET /discover/{id}/genres/fetch (Last.fm album.getInfo; read-only, nothing persisted) |
 | `compilations.py` | GET /compilations |
@@ -42,7 +43,7 @@ Script must live at `api/scripts/scan.py` (inside the Docker build context). Mov
 
 ## Migrations
 
-Applied: **0001–0011**. Next number: **0012**.
+Applied: **0001–0012**. Next number: **0013**.
 
 | File | Change |
 |---|---|
@@ -57,6 +58,7 @@ Applied: **0001–0011**. Next number: **0012**.
 | 0009_add_album_type | `album_type VARCHAR(8) NOT NULL DEFAULT 'album'` on `albums` |
 | 0010_vector_expansion | Drops HNSW, truncates `track_vectors` + `vector_norm_params`, alters `feature_vector` to `vector(60)`, recreates HNSW |
 | 0011_add_similarity_weights | 9 `sim_weight_*` columns on `users` (INTEGER NOT NULL DEFAULT 5): timbre, timbral_variation, harmony, chord_movement, tempo, loudness, dynamic_range, brightness, tonal |
+| 0012_add_playlist_permissions | `view_mode VARCHAR(10) DEFAULT 'everyone'`, `edit_mode VARCHAR(10) DEFAULT 'owner'` on `playlists`; new tables `playlist_viewers (playlist_id, user_id)`, `playlist_editors (playlist_id, user_id)` with cascade-delete FKs |
 
 Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overridden at runtime via `env.py`. Do not add a value there.
 
