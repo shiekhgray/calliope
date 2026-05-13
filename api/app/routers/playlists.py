@@ -1,7 +1,7 @@
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import text
+from sqlalchemy import text, delete
 from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
@@ -23,14 +23,94 @@ DIM_SLICES = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Permission helpers
+# ---------------------------------------------------------------------------
+
+def can_edit(user: models.User, playlist: models.Playlist) -> bool:
+    if user.id == playlist.owner_id:
+        return True
+    if playlist.edit_mode == "everyone":
+        return True
+    editor_ids = [e.id for e in playlist.editors]
+    if playlist.edit_mode == "users" and user.id in editor_ids:
+        return True
+    return False
+
+
+def can_view(user: models.User, playlist: models.Playlist) -> bool:
+    if playlist.view_mode == "everyone":
+        return True
+    if user.id == playlist.owner_id:
+        return True
+    viewer_ids = [v.id for v in playlist.viewers]
+    if playlist.view_mode == "users" and user.id in viewer_ids:
+        return True
+    return can_edit(user, playlist)
+
+
+# ---------------------------------------------------------------------------
+# Serialization helpers
+# ---------------------------------------------------------------------------
+
+def _playlist_summary(pl: models.Playlist) -> dict:
+    return {
+        "id": pl.id,
+        "title": pl.title,
+        "description": pl.description,
+        "owner_id": pl.owner_id,
+        "created_at": pl.created_at,
+        "view_mode": pl.view_mode,
+        "edit_mode": pl.edit_mode,
+        "viewer_ids": [v.id for v in pl.viewers],
+        "editor_ids": [e.id for e in pl.editors],
+    }
+
+
+def _playlist_detail(pl: models.Playlist) -> dict:
+    d = _playlist_summary(pl)
+    d["entries"] = [
+        {
+            "id": e.id,
+            "position": e.position,
+            "track": {
+                "id": e.track.id,
+                "title": e.track.title,
+                "track_number": e.track.track_number,
+                "duration_ms": e.track.duration_ms,
+                "bitrate_kbps": e.track.bitrate_kbps,
+                "format": e.track.format,
+                "album_id": e.track.album_id,
+                "album_title": e.track.album.title,
+                "artist_id": e.track.album.artist_id,
+                "artist_name": e.track.album.artist.name,
+            },
+        }
+        for e in pl.entries
+    ]
+    return d
+
+
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
 class PlaylistCreate(BaseModel):
     title: str
     description: str | None = None
+    view_mode: str = "everyone"
+    edit_mode: str = "owner"
+    viewer_ids: list[int] = []
+    editor_ids: list[int] = []
 
 
 class PlaylistUpdate(BaseModel):
     title: str | None = None
     description: str | None = None
+    view_mode: str | None = None
+    edit_mode: str | None = None
+    viewer_ids: list[int] | None = None
+    editor_ids: list[int] | None = None
 
 
 class TrackAdd(BaseModel):
@@ -41,42 +121,59 @@ class ReorderBody(BaseModel):
     track_ids: list[int]
 
 
+# ---------------------------------------------------------------------------
+# Helper: sync viewer/editor membership lists
+# ---------------------------------------------------------------------------
+
+def _sync_viewers(db: Session, playlist: models.Playlist, user_ids: list[int]) -> None:
+    db.execute(
+        delete(models.playlist_viewers).where(
+            models.playlist_viewers.c.playlist_id == playlist.id
+        )
+    )
+    for uid in user_ids:
+        db.execute(
+            models.playlist_viewers.insert().values(playlist_id=playlist.id, user_id=uid)
+        )
+
+
+def _sync_editors(db: Session, playlist: models.Playlist, user_ids: list[int]) -> None:
+    db.execute(
+        delete(models.playlist_editors).where(
+            models.playlist_editors.c.playlist_id == playlist.id
+        )
+    )
+    for uid in user_ids:
+        db.execute(
+            models.playlist_editors.insert().values(playlist_id=playlist.id, user_id=uid)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
 @router.get("")
-def list_playlists(db: Session = Depends(get_db)):
-    return db.query(models.Playlist).order_by(models.Playlist.created_at).all()
+def list_playlists(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    all_playlists = db.query(models.Playlist).order_by(models.Playlist.created_at).all()
+    return [_playlist_summary(pl) for pl in all_playlists if can_view(current_user, pl)]
 
 
 @router.get("/{playlist_id}")
-def get_playlist(playlist_id: int, db: Session = Depends(get_db)):
+def get_playlist(
+    playlist_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
     pl = db.get(models.Playlist, playlist_id)
     if not pl:
         raise HTTPException(status_code=404)
-    return {
-        "id": pl.id,
-        "title": pl.title,
-        "description": pl.description,
-        "owner_id": pl.owner_id,
-        "created_at": pl.created_at,
-        "entries": [
-            {
-                "id": e.id,
-                "position": e.position,
-                "track": {
-                    "id": e.track.id,
-                    "title": e.track.title,
-                    "track_number": e.track.track_number,
-                    "duration_ms": e.track.duration_ms,
-                    "bitrate_kbps": e.track.bitrate_kbps,
-                    "format": e.track.format,
-                    "album_id": e.track.album_id,
-                    "album_title": e.track.album.title,
-                    "artist_id": e.track.album.artist_id,
-                    "artist_name": e.track.album.artist.name,
-                },
-            }
-            for e in pl.entries
-        ],
-    }
+    if not can_view(current_user, pl):
+        raise HTTPException(status_code=403)
+    return _playlist_detail(pl)
 
 
 @router.post("", status_code=201)
@@ -85,11 +182,24 @@ def create_playlist(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    pl = models.Playlist(owner_id=current_user.id, title=body.title, description=body.description)
+    pl = models.Playlist(
+        owner_id=current_user.id,
+        title=body.title,
+        description=body.description,
+        view_mode=body.view_mode,
+        edit_mode=body.edit_mode,
+    )
     db.add(pl)
+    db.flush()  # get pl.id before inserting association rows
+
+    if body.viewer_ids:
+        _sync_viewers(db, pl, body.viewer_ids)
+    if body.editor_ids:
+        _sync_editors(db, pl, body.editor_ids)
+
     db.commit()
     db.refresh(pl)
-    return pl
+    return _playlist_summary(pl)
 
 
 @router.put("/{playlist_id}")
@@ -97,29 +207,47 @@ def update_playlist(
     playlist_id: int,
     body: PlaylistUpdate,
     db: Session = Depends(get_db),
-    _current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     pl = db.get(models.Playlist, playlist_id)
     if not pl:
         raise HTTPException(status_code=404)
+    if not can_edit(current_user, pl):
+        raise HTTPException(status_code=403)
+
+    # Any editor can update title/description
     if body.title is not None:
         pl.title = body.title
     if body.description is not None:
         pl.description = body.description
+
+    # Only owner can update permission fields
+    if current_user.id == pl.owner_id:
+        if body.view_mode is not None:
+            pl.view_mode = body.view_mode
+        if body.edit_mode is not None:
+            pl.edit_mode = body.edit_mode
+        if body.viewer_ids is not None:
+            _sync_viewers(db, pl, body.viewer_ids)
+        if body.editor_ids is not None:
+            _sync_editors(db, pl, body.editor_ids)
+
     db.commit()
     db.refresh(pl)
-    return pl
+    return _playlist_summary(pl)
 
 
 @router.delete("/{playlist_id}", status_code=204)
 def delete_playlist(
     playlist_id: int,
     db: Session = Depends(get_db),
-    _current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     pl = db.get(models.Playlist, playlist_id)
     if not pl:
         raise HTTPException(status_code=404)
+    if current_user.id != pl.owner_id:
+        raise HTTPException(status_code=403)
     db.delete(pl)
     db.commit()
 
@@ -129,11 +257,13 @@ def add_track(
     playlist_id: int,
     body: TrackAdd,
     db: Session = Depends(get_db),
-    _current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
     pl = db.get(models.Playlist, playlist_id)
     if not pl:
         raise HTTPException(status_code=404)
+    if not can_edit(current_user, pl):
+        raise HTTPException(status_code=403)
     max_pos = max((e.position for e in pl.entries), default=-1)
     entry = models.PlaylistTrack(
         playlist_id=playlist_id, track_id=body.track_id, position=max_pos + 1
@@ -149,8 +279,13 @@ def remove_track(
     playlist_id: int,
     track_id: int,
     db: Session = Depends(get_db),
-    _current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
+    pl = db.get(models.Playlist, playlist_id)
+    if not pl:
+        raise HTTPException(status_code=404)
+    if not can_edit(current_user, pl):
+        raise HTTPException(status_code=403)
     entry = (
         db.query(models.PlaylistTrack)
         .filter_by(playlist_id=playlist_id, track_id=track_id)
@@ -167,12 +302,17 @@ def reorder_tracks(
     playlist_id: int,
     body: ReorderBody,
     db: Session = Depends(get_db),
-    _current_user: models.User = Depends(get_current_user),
+    current_user: models.User = Depends(get_current_user),
 ):
+    pl = db.get(models.Playlist, playlist_id)
+    if not pl:
+        raise HTTPException(status_code=404)
+    if not can_edit(current_user, pl):
+        raise HTTPException(status_code=403)
     entries = {e.track_id: e for e in db.query(models.PlaylistTrack).filter_by(playlist_id=playlist_id).all()}
-    for pos, track_id in enumerate(body.track_ids):
-        if track_id in entries:
-            entries[track_id].position = pos
+    for pos, tid in enumerate(body.track_ids):
+        if tid in entries:
+            entries[tid].position = pos
     db.commit()
     return {"ok": True}
 
@@ -188,6 +328,8 @@ def similar_to_playlist(
     pl = db.get(models.Playlist, playlist_id)
     if not pl:
         raise HTTPException(status_code=404)
+    if not can_view(current_user, pl):
+        raise HTTPException(status_code=403)
 
     # 2. All track_ids ordered by position; seed pool = last min(10, len) entries
     ordered_track_ids = [e.track_id for e in pl.entries]  # already ordered by position

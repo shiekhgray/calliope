@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import api from '../api/client'
 import { usePlayer } from '../player/PlayerContext'
+import { useAuth } from '../auth/AuthContext'
 import { useRegisterFirstTrack } from '../hooks/useSpacebarPlayback'
 import AddToPlaylistMenu from '../components/AddToPlaylistMenu'
 
@@ -16,18 +17,32 @@ function fmt(ms) {
 
 export default function PlaylistPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const qc = useQueryClient()
   const { playTrack, currentTrack, isPlaying } = usePlayer()
+  const { userId } = useAuth()
   const [editingTitle, setEditingTitle] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   const [localTracks, setLocalTracks] = useState(null)
   const dragIndex = useRef(null)
   const dragOverIndex = useRef(null)
 
+  // Permissions panel state
+  const [showPermissions, setShowPermissions] = useState(false)
+  const [viewMode, setViewMode] = useState('everyone')
+  const [editMode, setEditMode] = useState('owner')
+  const [viewerIds, setViewerIds] = useState([])
+  const [editorIds, setEditorIds] = useState([])
+
   const { data: playlist, isLoading } = useQuery({
     queryKey: ['playlist', id],
     queryFn: () => api.get(`/playlists/${id}`).then((r) => r.data),
     onSuccess: () => setLocalTracks(null), // reset local order on fresh fetch
+  })
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api.get('/users').then((r) => r.data),
   })
 
   const renameMutation = useMutation({
@@ -36,6 +51,23 @@ export default function PlaylistPage() {
       qc.invalidateQueries({ queryKey: ['playlist', id] })
       qc.invalidateQueries({ queryKey: ['playlists'] })
       setEditingTitle(false)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/playlists/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['playlists'] })
+      navigate('/playlists')
+    },
+  })
+
+  const permissionsMutation = useMutation({
+    mutationFn: (data) => api.put(`/playlists/${id}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['playlist', id] })
+      qc.invalidateQueries({ queryKey: ['playlists'] })
+      setShowPermissions(false)
     },
   })
 
@@ -82,6 +114,29 @@ export default function PlaylistPage() {
 
   const serverTracks = playlist.entries?.map((e) => ({ ...e.track, entry_id: e.id })) ?? []
   const tracks = localTracks ?? serverTracks
+
+  const isOwner = playlist.owner_id === userId
+  const canEdit =
+    isOwner ||
+    playlist.edit_mode === 'everyone' ||
+    (playlist.edit_mode === 'users' && playlist.editor_ids?.includes(userId))
+
+  const ownerUser = users.find((u) => u.id === playlist.owner_id)
+  const otherUsers = users.filter((u) => u.id !== playlist.owner_id)
+
+  function openPermissions() {
+    setViewMode(playlist.view_mode ?? 'everyone')
+    setEditMode(playlist.edit_mode ?? 'owner')
+    setViewerIds(playlist.viewer_ids ?? [])
+    setEditorIds(playlist.editor_ids ?? [])
+    setShowPermissions(true)
+  }
+
+  function toggleUserId(setList, uid) {
+    setList((prev) =>
+      prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]
+    )
+  }
 
   function handleDragStart(i) {
     dragIndex.current = i
@@ -135,13 +190,121 @@ export default function PlaylistPage() {
           </form>
         ) : (
           <>
-            <h2>{playlist.title}</h2>
-            <button onClick={() => { setNewTitle(playlist.title); setEditingTitle(true) }}>
-              Rename
-            </button>
+            <div>
+              <h2>{playlist.title}</h2>
+              {!isOwner && ownerUser && (
+                <div className="playlist-owner-subtitle">by {ownerUser.username}</div>
+              )}
+            </div>
+            {canEdit && (
+              <button onClick={() => { setNewTitle(playlist.title); setEditingTitle(true) }}>
+                Rename
+              </button>
+            )}
+            {isOwner && (
+              <button
+                className="gear-btn"
+                title="Permissions"
+                onClick={() => showPermissions ? setShowPermissions(false) : openPermissions()}
+              >
+                ⚙
+              </button>
+            )}
+            {isOwner && (
+              <button
+                className="delete-btn"
+                title="Delete playlist"
+                onClick={() => {
+                  if (window.confirm(`Delete "${playlist.title}"?`)) deleteMutation.mutate()
+                }}
+              >
+                ✕
+              </button>
+            )}
           </>
         )}
       </div>
+
+      {showPermissions && (
+        <div className="permissions-panel">
+          <div className="permissions-section">
+            <div className="permissions-section-title">Who can view</div>
+            <div className="permissions-radio-group">
+              {[['owner', 'Only me'], ['users', 'Specific users'], ['everyone', 'Everyone']].map(([val, label]) => (
+                <label key={val}>
+                  <input
+                    type="radio"
+                    name="view_mode"
+                    value={val}
+                    checked={viewMode === val}
+                    onChange={() => setViewMode(val)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            {viewMode === 'users' && otherUsers.length > 0 && (
+              <div className="permissions-user-list">
+                {otherUsers.map((u) => (
+                  <label key={u.id}>
+                    <input
+                      type="checkbox"
+                      checked={viewerIds.includes(u.id)}
+                      onChange={() => toggleUserId(setViewerIds, u.id)}
+                    />
+                    {u.username}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="permissions-section">
+            <div className="permissions-section-title">Who can edit</div>
+            <div className="permissions-radio-group">
+              {[['owner', 'Only me'], ['users', 'Specific users'], ['everyone', 'Everyone']].map(([val, label]) => (
+                <label key={val}>
+                  <input
+                    type="radio"
+                    name="edit_mode"
+                    value={val}
+                    checked={editMode === val}
+                    onChange={() => setEditMode(val)}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+            {editMode === 'users' && otherUsers.length > 0 && (
+              <div className="permissions-user-list">
+                {otherUsers.map((u) => (
+                  <label key={u.id}>
+                    <input
+                      type="checkbox"
+                      checked={editorIds.includes(u.id)}
+                      onChange={() => toggleUserId(setEditorIds, u.id)}
+                    />
+                    {u.username}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="permissions-save-row">
+            <button
+              className="btn-primary"
+              style={{ background: 'var(--accent)', border: '1px solid var(--accent)', color: '#fff', borderRadius: '7px', padding: '8px 18px', fontSize: '0.9rem' }}
+              disabled={permissionsMutation.isPending}
+              onClick={() =>
+                permissionsMutation.mutate({ view_mode: viewMode, edit_mode: editMode, viewer_ids: viewerIds, editor_ids: editorIds })
+              }
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
 
       {tracks.length === 0 ? (
         <p className="empty">No tracks yet.</p>
@@ -161,13 +324,14 @@ export default function PlaylistPage() {
                   <tr
                     key={track.entry_id}
                     className={active ? 'active' : ''}
-                    draggable
-                    onDragStart={() => handleDragStart(i)}
-                    onDragOver={(e) => handleDragOver(e, i)}
-                    onDrop={handleDrop}
-                    onDragEnd={handleDragEnd}
+                    draggable={canEdit}
+                    onDragStart={canEdit ? () => handleDragStart(i) : undefined}
+                    onDragOver={canEdit ? (e) => handleDragOver(e, i) : undefined}
+                    onDrop={canEdit ? handleDrop : undefined}
+                    onDragEnd={canEdit ? handleDragEnd : undefined}
                   >
-                    <td className="track-drag" title="Drag to reorder">⠿</td>
+                    {canEdit && <td className="track-drag" title="Drag to reorder">⠿</td>}
+                    {!canEdit && <td />}
                     <td className="track-num">{i + 1}</td>
                     <td className="track-name">
                       <button
@@ -191,13 +355,15 @@ export default function PlaylistPage() {
                     <td className="track-bitrate">{track.bitrate_kbps ? `${track.bitrate_kbps} kbps` : ''}</td>
                     <td className="track-actions"><AddToPlaylistMenu trackId={track.id} /></td>
                     <td>
-                      <button
-                        className="delete-btn"
-                        onClick={() => removeTrackMutation.mutate(track.id)}
-                        title="Remove"
-                      >
-                        ✕
-                      </button>
+                      {canEdit && (
+                        <button
+                          className="delete-btn"
+                          onClick={() => removeTrackMutation.mutate(track.id)}
+                          title="Remove"
+                        >
+                          ✕
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )

@@ -612,3 +612,78 @@ tr:hover .track-credits-row .credit-add-btn { opacity: 1; }
 .genre-pending-note { font-size: 0.78rem; color: var(--text-dim); }
 .genre-apply-progress { font-size: 0.8rem; color: var(--text-dim); }
 .genre-apply-done { font-size: 0.8rem; color: var(--accent); }
+
+/* ── Playlist permissions ── */
+.playlist-owner-subtitle { font-size: 0.82rem; color: var(--text-dim); margin-top: 2px; }
+
+.gear-btn {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.gear-btn:hover { color: var(--text); }
+
+.permissions-panel {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.permissions-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.permissions-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.permissions-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.permissions-radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.permissions-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 20px;
+  margin-top: 4px;
+}
+
+.permissions-user-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.permissions-save-row {
+  display: flex;
+  justify-content: flex-end;
+}

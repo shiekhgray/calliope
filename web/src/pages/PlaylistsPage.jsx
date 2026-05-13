@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import api from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 
 export default function PlaylistsPage() {
   const qc = useQueryClient()
+  const { userId } = useAuth()
   const [newTitle, setNewTitle] = useState('')
   const [creating, setCreating] = useState(false)
 
@@ -63,13 +65,15 @@ export default function PlaylistsPage() {
           {playlists.map((pl) => (
             <li key={pl.id} className="playlist-item">
               <Link to={`/playlists/${pl.id}`}>{pl.title}</Link>
-              <button
-                className="delete-btn"
-                onClick={() => deleteMutation.mutate(pl.id)}
-                title="Delete"
-              >
-                ✕
-              </button>
+              {pl.owner_id === userId && (
+                <button
+                  className="delete-btn"
+                  onClick={() => deleteMutation.mutate(pl.id)}
+                  title="Delete"
+                >
+                  ✕
+                </button>
+              )}
             </li>
           ))}
         </ul>

@@ -2,12 +2,28 @@ from datetime import datetime
 
 from sqlalchemy import (
     ARRAY, BigInteger, Boolean, Column, Date, DateTime, Float,
-    ForeignKey, Integer, String, Text, UniqueConstraint
+    ForeignKey, Integer, String, Table, Text, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from pgvector.sqlalchemy import Vector
 
 from app.database import Base
+
+
+# Association tables for playlist ACLs
+playlist_viewers = Table(
+    "playlist_viewers",
+    Base.metadata,
+    Column("playlist_id", Integer, ForeignKey("playlists.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
+
+playlist_editors = Table(
+    "playlist_editors",
+    Base.metadata,
+    Column("playlist_id", Integer, ForeignKey("playlists.id", ondelete="CASCADE"), primary_key=True),
+    Column("user_id", Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class User(Base):
@@ -111,12 +127,16 @@ class Playlist(Base):
     title = Column(String(255), nullable=False)
     description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    view_mode = Column(String(10), nullable=False, default="everyone")
+    edit_mode = Column(String(10), nullable=False, default="owner")
 
     owner = relationship("User", back_populates="playlists")
     entries = relationship(
         "PlaylistTrack", back_populates="playlist",
         order_by="PlaylistTrack.position", cascade="all, delete-orphan"
     )
+    viewers = relationship("User", secondary="playlist_viewers", lazy="select")
+    editors = relationship("User", secondary="playlist_editors", lazy="select")
 
 
 class Discovery(Base):

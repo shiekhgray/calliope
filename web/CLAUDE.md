@@ -68,6 +68,8 @@ web/src/
 - `history` is pushed on `onended` and `skipNext`; reset on `playTrack`
 - Radio mode extends the queue when it empties (via `onended`) or `skipNext` is called at end of queue
 - `onended` fires POST `/tracks/{id}/played` — fire-and-forget, errors swallowed
+- **StrictMode + nested setState hazard**: `<StrictMode>` double-invokes functional updaters. Calling `setState` inside another `setState`'s updater causes the inner dispatch to fire twice, with React processing both sequentially. In `onended` this meant `queueIndex` incremented by 2 (skipping every other track). Fix: `queueRef`/`queueIndexRef`/`currentTrackRef` mirror state; all event handlers read refs and call flat (non-nested) setters via `_setQueue`/`_setQueueIndex`/`_setCurrentTrack` wrappers.
+- **Tab discard survival**: `PlayerContext` holds a Web Lock (`navigator.locks`, `'calliope-player'`) to hint Chrome not to discard the tab. State is also saved to `sessionStorage` (`'calliope-player-state'`) on `visibilitychange`/`pagehide` and restored on mount — audio src is reloaded and seeks to saved position, `isPlaying` is set to `false` (not `null`) so PlayerBar renders. `playTrack()` clears saved state to prevent stale restore racing a fresh play.
 
 ## Dynamic Color Theme
 
@@ -113,3 +115,4 @@ URL format: `{origin}/calliope/albums/{id}?play={trackId}&note={artist}_{album}`
 | `['artist-singles', id]` | Singles & EPs for artist — from GET /artists/{id}/singles |
 | `['me']` | Current user profile + similarity weights — staleTime: Infinity; invalidated on weight save |
 | `['album-genres', albumId]` | Committed genres for an album — invalidated on POST/DELETE genre |
+| `['users']` | All users `[{id, username}]` — used in PlaylistPage for permissions panel user picker and owner name display |
