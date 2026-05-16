@@ -41,9 +41,13 @@
         Fixed: album_type on Album/AlbumDetail, playlist permissions fields on Playlist/PlaylistDetail,
         getArtistSingles/Compilations/getTopTracks/getPlaylistSimilar added to CalliopeApi,
         ArtistViewModel fetches singles, ArtistScreen shows Singles & EPs section
+    - [x] Android Home Screen Redesign — Home tab replaces Library; Now Playing embedded in Home;
+        Stop button in transport; Settings sheet (Change Password, Sound Matching, Sign Out);
+        SettingsViewModel; LibraryContent extracted; NowPlayingScreen gutted; merged to master
   - [ ] Build + sign APK, sideload and test
         Note: generate keystore manually with keytool; store creds in local.properties (not git);
         add signingConfigs block to app/build.gradle.kts; run ./gradlew assembleRelease
+        Build from C:\Users\shiek\Documents\calliope\android (main repo, not worktrees)
 
 ## Up Next
 - [x] [Singles & EPs](prd/singles.md) — migration 0009 applied; album_type column; PATCH /albums/{id}/type; GET /artists/{id}/singles; AlbumPage type-cycle pill; ArtistPage Singles & EPs section
