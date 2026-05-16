@@ -16,7 +16,7 @@ docker compose exec api alembic upgrade head
 | `tracks.py` | GET /tracks?sort=play_count&limit=N (auth, default 50), GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar (applies per-user sim_weight_* via DIM_SLICES) |
 | `genres.py` | GET /genres (accepts `?q=` for autocomplete filter, limit 20 when q set) |
 | `search.py` | GET /search?q= (unaccent), GET/POST /search/history (auth; upsert + prune to 10) |
-| `playlists.py` | Full CRUD + add/remove/reorder tracks + similar; all endpoints require auth; GET /playlists and GET /playlists/{id} gate by can_view; track mutations gate by can_edit; DELETE is owner-only; responses include view_mode, edit_mode, viewer_ids, editor_ids, owner_id |
+| `playlists.py` | Full CRUD + add/remove/reorder tracks + similar; all endpoints require auth; GET /playlists and GET /playlists/{id} gate by can_view; track mutations gate by can_edit; DELETE is owner-only; GET /playlists returns enriched card data: art_tracks (0–4, centroid-based 2-pass selection), preview_tracks (first 3 titles), top_genres (top 4 by frequency), track_count |
 | `users.py` | GET /users (auth required) — returns [{id, username}] for all users |
 | `scanner.py` | POST /scanner/trigger (auth, 409 if running), GET /scanner/status — two phases: scan + index |
 | `discover.py` | POST /discover/refresh, GET /discover/status, GET /discover(?artist_id=), POST /discover/{id}/dismiss, GET /discover/{id}/genres/fetch (Last.fm album.getInfo; read-only, nothing persisted) |
