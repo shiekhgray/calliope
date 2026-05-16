@@ -36,7 +36,7 @@ calliope/
 
 - **Music files**: `/backup/calliope/music/` — mounted **read-write** (album art upload writes `Folder.jpg`)
 - **Public URL**: `https://dresdengray.com/calliope/` — HTTPS via Let's Encrypt, auto-renewing
-- **Migrations**: run manually — `docker compose exec api alembic upgrade head` — applied 0001–0008
+- **Migrations**: run manually — `docker compose exec api alembic upgrade head` — applied 0001–0012
 - **API changes**: require `docker compose build api && docker compose up -d api` (code baked into image)
 - **nginx config**: `/etc/nginx/default.d/calliope.conf`. Apply: `sudo nginx -s reload`
 - **Docker**: use `docker compose` (v2 plugin). `version:` header in compose file is obsolete — harmless.
@@ -72,23 +72,32 @@ calliope/
 ## Database Schema
 
 ```
-users              id, username, password_hash
+users              id, username, password_hash, sim_weight_timbre, sim_weight_timbral_variation,
+                   sim_weight_harmony, sim_weight_chord_movement, sim_weight_tempo,
+                   sim_weight_loudness, sim_weight_dynamic_range, sim_weight_brightness,
+                   sim_weight_tonal  (9 × INTEGER NOT NULL DEFAULT 5, migration 0011)
 artists            id, name
-albums             id, artist_id, title, year, cover_art_path
+albums             id, artist_id, title, year, cover_art_path,
+                   album_type VARCHAR(8) NOT NULL DEFAULT 'album'  (migration 0009; values: album/ep/single)
 tracks             id, album_id, title, track_number, duration_ms, bitrate_kbps, file_path, format,
                    play_count
 genres             id, name
 track_genres       track_id, genre_id
 album_artists      album_id (FK→albums), artist_id (FK→artists) — composite PK; primary album credits
 track_credits      track_id (FK→tracks), artist_id (FK→artists) — composite PK; featured/guest credits
-playlists          id, owner_id, title, description, created_at
+playlists          id, owner_id, title, description, created_at,
+                   view_mode VARCHAR(10) DEFAULT 'everyone',  edit_mode VARCHAR(10) DEFAULT 'owner'
+                   (migration 0012)
+playlist_viewers   playlist_id (FK), user_id (FK) — cascade delete (migration 0012)
+playlist_editors   playlist_id (FK), user_id (FK) — cascade delete (migration 0012)
 playlist_tracks    id, playlist_id, track_id, position
 discoveries        id, artist_id, itunes_collection_id (unique bigint), album_title, release_date,
                    artwork_url, dismissed, first_seen_at
 search_history     id, user_id, entity_type ('artist'|'album'|'track'), entity_id, visited_at;
                    UNIQUE(user_id, entity_type, entity_id)
-track_vectors      track_id (FK unique), feature_vector vector(38), file_mtime bigint
-vector_norm_params id (always 1), means float[38], stds float[38], updated_at
+track_vectors      track_id (FK unique), feature_vector vector(60), file_mtime bigint
+                   (expanded 38→60 dims in migration 0010; HNSW index on feature_vector)
+vector_norm_params id (always 1), means float[60], stds float[60], updated_at
 ```
 
 - `cover_art_path` is relative from music root; served via API (no direct filesystem exposure)
@@ -96,6 +105,8 @@ vector_norm_params id (always 1), means float[38], stds float[38], updated_at
 - `album.artist_id` — kept as the display label for album cards (scanner writes from albumartist tag). Attribution for artist pages is driven by `album_artists`; `album.artist_id` is display-only.
 - `album_artists` / `track_credits` — added by migration 0008. `track_artist` and `track_artist_id` columns were dropped.
 - `GET /artists` — shows artists with at least one `album_artists` row OR at least one album with no `album_artists` rows at all. Combined-credit ghost entries ("i_o & Lights") disappear automatically once their albums are claimed via `album_artists`.
+- `album_type` — enforced at API layer (not DB constraint). Cycle pill on AlbumPage (owner only): album → ep → single.
+- Playlist permissions: `view_mode` ('everyone'|'users') + `edit_mode` ('owner'|'users'|'everyone'); membership via `playlist_viewers`/`playlist_editors` join tables. All playlist endpoints now require auth.
 
 ## Non-Obvious Rules
 
@@ -149,7 +160,7 @@ Utility skills (still invoked inline via `Skill()`):
 
 See `.todo` for status. Full specs in `prd/`.
 
-Up next: Singles & EPs (migration 0009), Genre Tagging, Playlist Permissions, Playlist Cards, Vector Expansion, Similarity Weights. Phase 5 Android is in progress — remaining substeps: playlist screens, WorkManager downloads, WiFi guard, APK signing.
+Phase 5 Android is nearly complete. Remaining: APK signing + sideload test, Moshi kapt→ksp (non-blocking), Android Auto full implementation. All web features through migration 0012 are shipped.
 
 
 ## Development Constraints

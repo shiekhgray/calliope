@@ -37,6 +37,10 @@
   - [ ] Migrate Moshi codegen `kapt → ksp` (build warning; non-blocking until Moshi 2.0)
         Note: project already uses ksp(libs.moshi.codegen); Hilt Java AP still emits warning — truly non-blocking
   - [x] Rebase worktree onto master before release (merged via PR #1)
+  - [x] Sync Android models + API endpoints with master API changes
+        Fixed: album_type on Album/AlbumDetail, playlist permissions fields on Playlist/PlaylistDetail,
+        getArtistSingles/Compilations/getTopTracks/getPlaylistSimilar added to CalliopeApi,
+        ArtistViewModel fetches singles, ArtistScreen shows Singles & EPs section
   - [ ] Build + sign APK, sideload and test
         Note: generate keystore manually with keytool; store creds in local.properties (not git);
         add signingConfigs block to app/build.gradle.kts; run ./gradlew assembleRelease
