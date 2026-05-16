@@ -21,14 +21,15 @@ web/src/
     AddToPlaylistMenu.jsx    ← "+" popover on every track row
     ChangePasswordModal.jsx
     SimilarityWeightsModal.jsx  ← 3 groups × 3 sliders; PUT /auth/similarity-weights; opened from user menu "Sound Matching"
+    PlaylistMosaicBanner.jsx    ← full-width 174px hero above PlaylistPage content; bin-packs album art left→right with squared-exponential density; col-first scan; top-25% albums get 2×2 slots
     ReleaseCardGenres.jsx       ← "Genres" toggle button + chip display for discovery cards; used in both ReleasesPage and ArtistPage (Missing Releases section)
   pages/
     LibraryPage              ← artist list
     ArtistPage               ← top 10 tracks + albums grid + Singles & EPs section + "Appears On" (compilations) + Missing Releases
     AlbumPage                ← album header (art upload overlay) + track table + share links; owner-only type-cycle pill (album→ep→single)
     SearchPage               ← search + history chips
-    PlaylistsPage            ← list + create/delete
-    PlaylistPage             ← detail + remove/reorder tracks
+    PlaylistsPage            ← playlist cards (2×2 art collage, track preview, genre chips, hover-reveal delete); PlaylistCard component inline
+    PlaylistPage             ← detail + remove/reorder tracks; mosaic banner above page header
     ReleasesPage             ← iTunes discovery; filter + sort; dismiss per card
     NowPlayingPage           ← /now-playing; large art, scrubber, queue context, similar tracks
     CompilationsPage         ← /compilations; VA album grid
@@ -46,6 +47,8 @@ web/src/
 **Vite proxy**: `/calliope/api` → `http://api:8000` (Docker env) or `http://localhost:8000` (local). Strips the prefix before forwarding to the API.
 
 **Album art upload**: do NOT manually set `Content-Type: multipart/form-data` on the axios PUT — omit it and let the browser set it with the correct boundary automatically.
+
+**PlayerContext re-render hazard**: `PlaylistPage` (and any page that calls `usePlayer()`) re-renders on every audio progress tick because the context value object is recreated each second. Any derived array created inline (e.g. `playlist.entries.map(...)`) gets a new reference every render. Components that key a `useEffect` on such an array will re-fire every second. Fix: derive a stable primitive (e.g. sorted unique IDs joined as a string) and use that as the effect dep instead of the array reference. See `PlaylistMosaicBanner` for the pattern.
 
 ## PlayerContext API
 

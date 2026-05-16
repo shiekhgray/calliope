@@ -47,10 +47,11 @@
 - [x] Similarity Weights — migration 0011 applied; 9 sim_weight_* columns on users (default 5); PUT /auth/similarity-weights; DIM_SLICES weight application in /tracks/{id}/similar; SimilarityWeightsModal in web; "Sound Matching" in user menu
 - [x] Genre Tagging — all API endpoints + web UI shipped; LASTFM_API_KEY must be added to api/.env to enable Last.fm fetch (currently returns [] gracefully without it)
 - [x] Playlist Permissions — migration 0012 applied; view_mode/edit_mode + playlist_viewers/editors tables; GET /users; permission checks on all playlist endpoints; gear-icon panel on PlaylistPage (owner-only); canEdit guards on rename/dnd/remove; owner name subtitle for non-owners
-- [ ] Playlist Cards
+- [x] Playlist Cards
 - [x] [Playlist Similar Tracks](prd/playlist-similar.md) — "Similar Tracks" section at bottom of playlist; centroid of last 10 seeds; play + add actions; live updates
 
 ## Later
+- [x] [Playlist Mosaic Banner](prd/playlist-mosaic-banner.md) — full-width hero of album art at top of playlist detail page; density gradient left→right; 2×2 squares for high-frequency albums; dark→transparent background
 - [ ] [Android Auto](prd/android-auto.md) — full browse tree, radio mode, offline playback
       Note: API endpoints done — GET /tracks?sort=play_count&limit=N added; GET /artists/{id}/top-tracks fixed (album_artists join, configurable limit). Android implementation pending.
 - [ ] [Phase 6: Polish & Search](prd/phase6-polish.md)

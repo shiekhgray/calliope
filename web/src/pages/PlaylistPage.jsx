@@ -6,6 +6,7 @@ import { usePlayer } from '../player/PlayerContext'
 import { useAuth } from '../auth/AuthContext'
 import { useRegisterFirstTrack } from '../hooks/useSpacebarPlayback'
 import AddToPlaylistMenu from '../components/AddToPlaylistMenu'
+import PlaylistMosaicBanner from '../components/PlaylistMosaicBanner'
 
 const SKELETON_COUNT = 10
 
@@ -169,6 +170,8 @@ export default function PlaylistPage() {
   }
 
   return (
+    <>
+    <PlaylistMosaicBanner tracks={tracks} />
     <div className="page">
       <div className="page-header">
         {editingTitle ? (
@@ -431,5 +434,6 @@ export default function PlaylistPage() {
         </div>
       )}
     </div>
+    </>
   )
 }
