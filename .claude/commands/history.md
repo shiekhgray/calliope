@@ -12,13 +12,13 @@ was built, what decisions were made, when things happened, and why.
 ## History Files
 
 All session records:
-!`ls /home/gray/calliope/project_history/`
+!`REPO=$(git rev-parse --show-toplevel 2>/dev/null || echo /home/gray/calliope); ls ${REPO}/project_history/`
 
 Read every history file:
-!`for f in /home/gray/calliope/project_history/*.md; do echo "=== $f ==="; cat "$f"; echo; done`
+!`REPO=$(git rev-parse --show-toplevel 2>/dev/null || echo /home/gray/calliope); for f in ${REPO}/project_history/*.md; do echo "=== $f ==="; cat "$f"; echo; done`
 
 Current project state for cross-reference:
-!`cat /home/gray/calliope/.todo`
+!`REPO=$(git rev-parse --show-toplevel 2>/dev/null || echo /home/gray/calliope); cat ${REPO}/.todo`
 
 ## What You Can Answer
 

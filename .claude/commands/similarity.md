@@ -14,16 +14,16 @@ this subsystem, read the relevant files first, then make targeted changes.
 
 Read these files to understand current state before making any changes:
 
-- `/home/gray/calliope/indexer/app/index.py` — feature extraction and indexing loop
-- `/home/gray/calliope/indexer/app/main.py` — HTTP server endpoints
-- `/home/gray/calliope/indexer/app/models.py` — DB models for indexer
-- `/home/gray/calliope/indexer/app/config.py` — indexer config
-- `/home/gray/calliope/indexer/Dockerfile` — indexer container setup
-- `/home/gray/calliope/api/app/routers/tracks.py` — similarity query endpoint
-- `/home/gray/calliope/api/app/routers/scanner.py` — two-phase scan + index trigger
-- `/home/gray/calliope/web/src/player/PlayerContext.jsx` — radio mode client
-- `/home/gray/calliope/prd/vector-expansion.md` — planned 60-dim expansion
-- `/home/gray/calliope/prd/similarity-weights.md` — planned per-user weight sliders
+- `indexer/app/index.py` — feature extraction and indexing loop
+- `indexer/app/main.py` — HTTP server endpoints
+- `indexer/app/models.py` — DB models for indexer
+- `indexer/app/config.py` — indexer config
+- `indexer/Dockerfile` — indexer container setup
+- `api/app/routers/tracks.py` — similarity query endpoint
+- `api/app/routers/scanner.py` — two-phase scan + index trigger
+- `web/src/player/PlayerContext.jsx` — radio mode client
+- `prd/vector-expansion.md` — planned 60-dim expansion
+- `prd/similarity-weights.md` — planned per-user weight sliders
 
 ## Architecture
 

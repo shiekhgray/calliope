@@ -18,6 +18,7 @@ import javax.inject.Inject
 data class ArtistUiData(
     val artistName: String,
     val albums: List<Album>,
+    val singles: List<Album>,
     val topTracks: List<Track>
 )
 
@@ -40,13 +41,16 @@ class ArtistViewModel @Inject constructor(
             try {
                 coroutineScope {
                     val albumsDeferred = async { api.getArtistAlbums(artistId) }
+                    val singlesDeferred = async { api.getArtistSingles(artistId) }
                     val topTracksDeferred = async { api.getArtistTopTracks(artistId) }
                     val albums = albumsDeferred.await()
+                    val singles = singlesDeferred.await()
                     val topTracks = topTracksDeferred.await()
                     val artistName = albums.firstOrNull()?.artistName
+                        ?: singles.firstOrNull()?.artistName
                         ?: topTracks.firstOrNull()?.artistName
                         ?: ""
-                    _state.value = UiState.Success(ArtistUiData(artistName, albums, topTracks))
+                    _state.value = UiState.Success(ArtistUiData(artistName, albums, singles, topTracks))
                 }
             } catch (e: Exception) {
                 _state.value = UiState.Error(e.message ?: "Failed to load artist")

@@ -6,13 +6,13 @@ description: Scan ~/Music/ for new albums (zips or directories), extract/copy th
 ## Context
 
 - Music library root: `/var/www/html/calliope/music/`
-- Staging area: `/home/gray/Music/`
-- Calliope project: `/home/gray/calliope/`
+- Staging area: `~/Music/`
+- Calliope project: !`git rev-parse --show-toplevel 2>/dev/null || echo /home/gray/calliope`
 
 Scan results from staging area:
-- Zip files: !`find /home/gray/Music -maxdepth 2 -name "*.zip" 2>/dev/null`
-- Loose directories (non-zip folders with audio): !`find /home/gray/Music -mindepth 2 -maxdepth 2 -type d 2>/dev/null`
-- Loose singles (bare audio files at root of staging area): !`find /home/gray/Music -maxdepth 1 \( -name "*.mp3" -o -name "*.m4a" \) 2>/dev/null`
+- Zip files: !`find ~/Music -maxdepth 2 -name "*.zip" 2>/dev/null`
+- Loose directories (non-zip folders with audio): !`find ~/Music -mindepth 2 -maxdepth 2 -type d 2>/dev/null`
+- Loose singles (bare audio files at root of staging area): !`find ~/Music -maxdepth 1 \( -name "*.mp3" -o -name "*.m4a" \) 2>/dev/null`
 - Current library artists: !`ls /var/www/html/calliope/music/ | sort`
 
 ## Your task
@@ -26,9 +26,9 @@ Scan results from staging area:
 4. **On confirmation**, for each item:
    - Zip files: extract with `unzip -d /var/www/html/calliope/music <zipfile>`
    - Loose directories: copy with `cp -r` to the correct Artist/ subdirectory under the library root
-   - Bare singles: use `python3 /home/gray/calliope/scripts/amazon_import.py --loose <audio_file> [cover.jpg]` — if a `cover.jpg` exists alongside the single in the staging area, pass it as the second argument
-   - After all items are imported, run the scanner: `cd /home/gray/calliope && docker compose exec api python scripts/scan.py`
+   - Bare singles: use `python3 $(git rev-parse --show-toplevel)/scripts/amazon_import.py --loose <audio_file> [cover.jpg]` — if a `cover.jpg` exists alongside the single in the staging area, pass it as the second argument
+   - After all items are imported, run the scanner: `docker compose -f $(git rev-parse --show-toplevel)/docker-compose.yml exec api python scripts/scan.py`
 
 5. **Report** the before/after track counts from the scanner output, and note any filenames with `__` (Amazon's substitute for `/` in track titles) that the user may want to verify have correct ID3 tags.
 
-6. After a successful import, **offer to clean up** the source zips/directories from `/home/gray/Music/` (ask first, don't delete automatically).
+6. After a successful import, **offer to clean up** the source zips/directories from `~/Music/` (ask first, don't delete automatically).

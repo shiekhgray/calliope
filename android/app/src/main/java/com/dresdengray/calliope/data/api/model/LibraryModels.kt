@@ -13,7 +13,9 @@ data class Album(
     val year: Int?,
     @Json(name = "cover_art_path") val coverArtPath: String?,
     @Json(name = "artist_id") val artistId: Int,
-    @Json(name = "artist_name") val artistName: String
+    @Json(name = "artist_name") val artistName: String,
+    // "album", "ep", or "single"
+    @Json(name = "album_type") val albumType: String = "album"
 )
 
 @JsonClass(generateAdapter = true)
@@ -44,5 +46,6 @@ data class AlbumDetail(
     @Json(name = "cover_art_path") val coverArtPath: String?,
     @Json(name = "artist_id") val artistId: Int,
     @Json(name = "artist_name") val artistName: String,
+    @Json(name = "album_type") val albumType: String = "album",
     val tracks: List<Track>
 )
