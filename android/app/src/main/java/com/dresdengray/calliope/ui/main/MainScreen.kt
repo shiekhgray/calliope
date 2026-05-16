@@ -73,7 +73,7 @@ fun MainScreen(
     ) { padding ->
         Box(modifier = Modifier.padding(padding)) {
             when (selectedTab) {
-                0 -> LibraryScreen(onNavigateToArtist = onNavigateToArtist)
+                0 -> LibraryScreen(onNavigateToArtist = onNavigateToArtist, onLogout = onLogout)
                 1 -> SearchScreen(
                     playerViewModel = playerViewModel,
                     onNavigateToArtist = onNavigateToArtist,

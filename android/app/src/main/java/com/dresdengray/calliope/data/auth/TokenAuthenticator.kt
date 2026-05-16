@@ -3,6 +3,9 @@ package com.dresdengray.calliope.data.auth
 import com.dresdengray.calliope.data.api.CalliopeApi
 import com.dresdengray.calliope.data.api.model.RefreshRequest
 import dagger.Lazy
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import okhttp3.Authenticator
 import okhttp3.Request
@@ -18,6 +21,10 @@ class TokenAuthenticator @Inject constructor(
     private val api: Lazy<CalliopeApi>
 ) : Authenticator {
 
+    // Dedicated dispatcher so the refresh call doesn't compete with the OkHttp thread pool
+    // that is blocked waiting for it (avoids potential thread starvation on real devices).
+    private val refreshScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
     override fun authenticate(route: Route?, response: Response): Request? {
         // If this request already carried a freshly-refreshed token, give up to avoid loops
         if (response.request.header("X-Token-Refreshed") != null) {
@@ -30,7 +37,7 @@ class TokenAuthenticator @Inject constructor(
             return null
         }
 
-        val newAccessToken = runBlocking {
+        val newAccessToken = runBlocking(refreshScope.coroutineContext) {
             try {
                 api.get().refresh(RefreshRequest(refreshToken)).accessToken
             } catch (e: Exception) {
