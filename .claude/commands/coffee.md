@@ -1,8 +1,8 @@
 Load context at the start of a new session before beginning work.
 
-1. Read `/home/gray/calliope/CLAUDE.md` in full — this is the canonical architecture reference.
+1. Read `CLAUDE.md` in full — this is the canonical architecture reference.
 
-2. Read `/home/gray/calliope/.todo` — identify:
+2. Read `.todo` — identify:
    - What phase we are currently in
    - The next unchecked task(s) to work on
    - Any inline notes or blockers left from the previous session

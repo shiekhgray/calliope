@@ -21,15 +21,15 @@ relevant files first, then make targeted changes.
 
 Read these files to understand current state before making any changes:
 
-- `/home/gray/calliope/web/src/App.jsx` — routes
-- `/home/gray/calliope/web/src/main.jsx` — app entry, QueryClient setup
-- `/home/gray/calliope/web/src/player/PlayerContext.jsx` — player state, playTrack API
-- `/home/gray/calliope/web/src/auth/AuthContext.jsx` — auth state, userId
-- `/home/gray/calliope/web/src/api/client.js` — axios instance
-- `/home/gray/calliope/web/src/index.css` — all CSS variables and class definitions
-- `/home/gray/calliope/web/src/pages/` — list to see all pages; read whichever are relevant
-- `/home/gray/calliope/web/src/components/Layout.jsx` — shell, nav, UserMenu
-- `/home/gray/calliope/web/CLAUDE.md` — additional conventions and current state
+- `web/src/App.jsx` — routes
+- `web/src/main.jsx` — app entry, QueryClient setup
+- `web/src/player/PlayerContext.jsx` — player state, playTrack API
+- `web/src/auth/AuthContext.jsx` — auth state, userId
+- `web/src/api/client.js` — axios instance
+- `web/src/index.css` — all CSS variables and class definitions
+- `web/src/pages/` — list to see all pages; read whichever are relevant
+- `web/src/components/Layout.jsx` — shell, nav, UserMenu
+- `web/CLAUDE.md` — additional conventions and current state
 
 ---
 

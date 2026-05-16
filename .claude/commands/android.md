@@ -24,9 +24,9 @@ changes aligned with the PRD.
 
 Read these files to understand current state before making any changes:
 
-- `/home/gray/calliope/android/` — list the directory tree to see what exists
-- `/home/gray/calliope/prd/phase5-android.md` — full Android spec and current status
-- `/home/gray/calliope/prd/android-auto.md` — Android Auto spec (later phase)
+- `android/` — list the directory tree to see what exists
+- `prd/phase5-android.md` — full Android spec and current status
+- `prd/android-auto.md` — Android Auto spec (later phase)
 - Relevant source files under `android/app/src/main/java/` depending on the task
 
 ## API the app talks to

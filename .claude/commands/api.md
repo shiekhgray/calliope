@@ -23,13 +23,13 @@ targeted changes.
 
 Read these files to understand current state before making any changes:
 
-- `/home/gray/calliope/api/app/models.py` — ORM models (source of truth for schema)
-- `/home/gray/calliope/api/app/main.py` — app setup and router registration
-- `/home/gray/calliope/api/app/auth.py` — auth helpers
-- `/home/gray/calliope/api/app/config.py` — settings
-- `/home/gray/calliope/api/app/routers/` — read whichever routers are relevant to your task
-- `/home/gray/calliope/api/alembic/versions/` — list to find the current head migration
-- `/home/gray/calliope/api/CLAUDE.md` — additional conventions and current state
+- `api/app/models.py` — ORM models (source of truth for schema)
+- `api/app/main.py` — app setup and router registration
+- `api/app/auth.py` — auth helpers
+- `api/app/config.py` — settings
+- `api/app/routers/` — read whichever routers are relevant to your task
+- `api/alembic/versions/` — list to find the current head migration
+- `api/CLAUDE.md` — additional conventions and current state
 
 ## Models
 
