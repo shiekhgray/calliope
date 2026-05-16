@@ -146,6 +146,15 @@ private fun ArtistContent(
                 AlbumCard(album = album, onClick = { onNavigateToAlbum(album.id) })
             }
         }
+
+        if (data.singles.isNotEmpty()) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SectionHeader("Singles & EPs")
+            }
+            items(data.singles) { single ->
+                AlbumCard(album = single, onClick = { onNavigateToAlbum(single.id) })
+            }
+        }
     }
 }
 

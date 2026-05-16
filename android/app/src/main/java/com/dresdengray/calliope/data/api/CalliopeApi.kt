@@ -51,13 +51,27 @@ interface CalliopeApi {
     @GET("artists/{id}/albums")
     suspend fun getArtistAlbums(@Path("id") artistId: Int): List<Album>
 
+    // Singles & EPs for this artist (album_type IN ('single', 'ep'))
+    @GET("artists/{id}/singles")
+    suspend fun getArtistSingles(@Path("id") artistId: Int): List<Album>
+
+    // Albums where artist has a track credit but is not the primary album artist
+    @GET("artists/{id}/compilations")
+    suspend fun getArtistCompilations(@Path("id") artistId: Int): List<Album>
+
     @GET("artists/{id}/top-tracks")
     suspend fun getArtistTopTracks(@Path("id") artistId: Int): List<Track>
 
     @GET("albums/{id}")
     suspend fun getAlbum(@Path("id") albumId: Int): AlbumDetail
 
-    // Playback
+    // Tracks
+    @GET("tracks")
+    suspend fun getTopTracks(
+        @Query("sort") sort: String = "play_count",
+        @Query("limit") limit: Int = 50
+    ): List<Track>
+
     @POST("tracks/{id}/played")
     suspend fun reportPlayed(@Path("id") trackId: Int): PlayedResponse
 
@@ -101,4 +115,10 @@ interface CalliopeApi {
 
     @PUT("playlists/{id}/tracks/reorder")
     suspend fun reorderPlaylistTracks(@Path("id") playlistId: Int, @Body body: ReorderRequest)
+
+    @GET("playlists/{id}/similar")
+    suspend fun getPlaylistSimilar(
+        @Path("id") playlistId: Int,
+        @Query("limit") limit: Int = 10
+    ): List<Track>
 }
