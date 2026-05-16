@@ -220,6 +220,26 @@ class PlayerViewModel @Inject constructor(
         _uiState.update { it.copy(positionMs = positionMs) }
     }
 
+    fun stopPlayback() {
+        mediaController?.run {
+            stop()
+            clearMediaItems()
+        }
+        _queueTracks.clear()
+        _uiState.update {
+            it.copy(
+                currentTrack = null,
+                isPlaying = false,
+                positionMs = 0L,
+                durationMs = 0L,
+                queueTracks = emptyList(),
+                currentIndex = 0
+            )
+        }
+        _similarTracks.value = emptyList()
+        stopPositionUpdates()
+    }
+
     fun toggleRadioMode() {
         val nowOn = !_radioMode.value
         _radioMode.value = nowOn

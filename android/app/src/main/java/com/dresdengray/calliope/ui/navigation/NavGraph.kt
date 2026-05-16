@@ -17,7 +17,6 @@ import com.dresdengray.calliope.ui.album.AlbumScreen
 import com.dresdengray.calliope.ui.artist.ArtistScreen
 import com.dresdengray.calliope.ui.auth.LoginScreen
 import com.dresdengray.calliope.ui.main.MainScreen
-import com.dresdengray.calliope.ui.player.NowPlayingScreen
 import com.dresdengray.calliope.ui.playlist.PlaylistDetailScreen
 
 @Composable
@@ -50,9 +49,6 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
                 onNavigateToPlaylist = { playlistId ->
                     navController.navigate("playlist/$playlistId")
                 },
-                onOpenNowPlaying = {
-                    navController.navigate("now-playing")
-                },
                 onLogout = {
                     tokenStorage.clear()
                     navController.navigate("login") {
@@ -70,7 +66,7 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
                 playerViewModel = playerViewModel,
                 onNavigateBack = { navController.popBackStack() },
                 onNavigateToAlbum = { albumId -> navController.navigate("album/$albumId") },
-                onOpenNowPlaying = { navController.navigate("now-playing") }
+                onOpenNowPlaying = { navController.popBackStack("main", inclusive = false) }
             )
         }
 
@@ -86,14 +82,7 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
                         navController.navigate("artist/$artistId")
                     }
                 },
-                onOpenNowPlaying = { navController.navigate("now-playing") }
-            )
-        }
-
-        composable("now-playing") {
-            NowPlayingScreen(
-                playerViewModel = playerViewModel,
-                onNavigateBack = { navController.popBackStack() }
+                onOpenNowPlaying = { navController.popBackStack("main", inclusive = false) }
             )
         }
 
@@ -104,7 +93,7 @@ fun NavGraph(tokenStorage: TokenStorage, playerViewModel: PlayerViewModel) {
             PlaylistDetailScreen(
                 playerViewModel = playerViewModel,
                 onNavigateBack = { navController.popBackStack() },
-                onOpenNowPlaying = { navController.navigate("now-playing") }
+                onOpenNowPlaying = { navController.popBackStack("main", inclusive = false) }
             )
         }
     }

@@ -4,6 +4,7 @@ import com.dresdengray.calliope.data.api.model.AddTrackRequest
 import com.dresdengray.calliope.data.api.model.AlbumDetail
 import com.dresdengray.calliope.data.api.model.Artist
 import com.dresdengray.calliope.data.api.model.Album
+import com.dresdengray.calliope.data.api.model.ChangePasswordRequest
 import com.dresdengray.calliope.data.api.model.CreatePlaylistRequest
 import com.dresdengray.calliope.data.api.model.LoginRequest
 import com.dresdengray.calliope.data.api.model.LoginResponse
@@ -17,6 +18,7 @@ import com.dresdengray.calliope.data.api.model.ReorderRequest
 import com.dresdengray.calliope.data.api.model.SearchHistoryEntry
 import com.dresdengray.calliope.data.api.model.SearchHistoryRequest
 import com.dresdengray.calliope.data.api.model.SearchResults
+import com.dresdengray.calliope.data.api.model.SimilarityWeightsRequest
 import com.dresdengray.calliope.data.api.model.Track
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -43,6 +45,12 @@ interface CalliopeApi {
 
     @GET("auth/me")
     suspend fun me(): MeResponse
+
+    @POST("auth/change-password")
+    suspend fun changePassword(@Body request: ChangePasswordRequest)
+
+    @PUT("auth/similarity-weights")
+    suspend fun updateSimilarityWeights(@Body request: SimilarityWeightsRequest)
 
     // Library
     @GET("artists")

@@ -25,4 +25,35 @@ data class RefreshResponse(
 )
 
 @JsonClass(generateAdapter = true)
-data class MeResponse(val id: Int, val username: String)
+data class MeResponse(
+    val id: Int,
+    val username: String,
+    @Json(name = "sim_weight_timbre") val simWeightTimbre: Int = 5,
+    @Json(name = "sim_weight_timbral_variation") val simWeightTimbralVariation: Int = 5,
+    @Json(name = "sim_weight_harmony") val simWeightHarmony: Int = 5,
+    @Json(name = "sim_weight_chord_movement") val simWeightChordMovement: Int = 5,
+    @Json(name = "sim_weight_tempo") val simWeightTempo: Int = 5,
+    @Json(name = "sim_weight_loudness") val simWeightLoudness: Int = 5,
+    @Json(name = "sim_weight_dynamic_range") val simWeightDynamicRange: Int = 5,
+    @Json(name = "sim_weight_brightness") val simWeightBrightness: Int = 5,
+    @Json(name = "sim_weight_tonal") val simWeightTonal: Int = 5
+)
+
+@JsonClass(generateAdapter = true)
+data class ChangePasswordRequest(
+    @Json(name = "current_password") val currentPassword: String,
+    @Json(name = "new_password") val newPassword: String
+)
+
+@JsonClass(generateAdapter = true)
+data class SimilarityWeightsRequest(
+    @Json(name = "sim_weight_timbre") val simWeightTimbre: Int,
+    @Json(name = "sim_weight_timbral_variation") val simWeightTimbralVariation: Int,
+    @Json(name = "sim_weight_harmony") val simWeightHarmony: Int,
+    @Json(name = "sim_weight_chord_movement") val simWeightChordMovement: Int,
+    @Json(name = "sim_weight_tempo") val simWeightTempo: Int,
+    @Json(name = "sim_weight_loudness") val simWeightLoudness: Int,
+    @Json(name = "sim_weight_dynamic_range") val simWeightDynamicRange: Int,
+    @Json(name = "sim_weight_brightness") val simWeightBrightness: Int,
+    @Json(name = "sim_weight_tonal") val simWeightTonal: Int
+)
