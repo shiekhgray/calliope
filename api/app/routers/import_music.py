@@ -158,7 +158,7 @@ def _extract_amazon(filename: str, zf: zipfile.ZipFile, audio_names: list, music
 
     count = 0
     for name in audio_names:
-        track_clean = _decode_amazon(Path(name).name)
+        track_clean = _decode_amazon(Path(name).name).replace("/", "-")
         (dest_dir / track_clean).write_bytes(zf.read(name))
         count += 1
 
