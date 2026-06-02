@@ -1,6 +1,6 @@
 # Android Auto
 
-**Status: Not started**
+**Status: Implemented — pending on-device build/test (Windows toolchain + both cars)**
 
 ## Goal
 
@@ -145,15 +145,23 @@ When building `MediaItem` for a track, check `DownloadedTrackDao.findDoneByTrack
 
 ## Task Breakdown
 
-- [ ] Add `kotlinx-coroutines-guava` dependency
-- [ ] Add `GET /tracks?sort=play_count&limit=N` endpoint (Recently Played)
-- [ ] Fix `GET /artists/{id}/top-tracks` — bump limit to 25, fix join to use `album_artists` instead of `albums.artist_id`
-- [ ] Implement `onGetChildren` for all node types in `MusicService.libraryCallback`
-- [ ] Implement `onGetItem` (needed for Auto to resolve individual track metadata)
-- [ ] Queue building on `onPlayFromMediaId` — load siblings, call `player.setMediaItems`
-- [ ] Extract `RadioQueueExtender` from `PlayerViewModel`; inject into `MusicService`
-- [ ] Radio toggle `CommandButton` in session `customLayout`; wire state in `MusicService`
-- [ ] Offline track URI substitution in Auto queue builder
+- [x] Add `kotlinx-coroutines-guava` dependency
+- [x] Add `GET /tracks?sort=play_count&limit=N` endpoint (Recently Played) — already present
+- [x] Fix `GET /artists/{id}/top-tracks` — limit defaults to 25, uses `album_artists` join — already present
+- [x] Implement `onGetChildren` for all node types in `MusicService.libraryCallback`
+- [x] Implement `onGetItem` (needed for Auto to resolve individual track metadata)
+- [x] Queue building — implemented via `onSetMediaItems` (Media3 idiom; replaces deprecated `onPlayFromMediaId`) + `onAddMediaItems` resolution; loads siblings, returns `MediaItemsWithStartPosition`
+- [x] Extract `RadioQueueExtender` from `PlayerViewModel`; inject into `MusicService`
+- [x] Radio toggle `CommandButton` in session `customLayout`; wire state in `MusicService`
+- [x] Offline track URI substitution in Auto queue builder (`RadioQueueExtender.toMediaItem` / shared `Track.toMediaItem`)
 - [ ] End-to-end test: browse Artists → Artist → Top Tracks → play; verify queue and radio extension
 - [ ] End-to-end test: browse Playlists → Playlist → play; verify downloaded tracks play from local file
 - [ ] Test on both cars (wired + wireless)
+
+## Implementation Notes (as built)
+
+- **Queue building** uses Media3's `onSetMediaItems` rather than the legacy `onPlayFromMediaId`. When an external controller (Auto) taps a browse item, the tapped node ID is parsed (`BrowseTree.parseTrack`), the full context is fetched from the API, and the resolved playable queue + start index is returned as `MediaItemsWithStartPosition`. `onAddMediaItems` is also overridden to resolve mediaId-only items.
+- **Phone vs Auto disambiguation**: `controller.packageName == packageName` identifies our own phone UI, whose items already carry URIs and are played as-is. Service-side radio auto-extension is gated on `autoInitiatedPlayback`, set true only when playback originates from the Auto browse tree — so the phone's radio (default OFF, toggled in NowPlaying) and Auto's radio (default ON, toggled via custom action) never double-extend the shared ExoPlayer queue.
+- **Browse vs playback mediaIds**: browse items carry node IDs (e.g. `track/5/album/3`); the resolved queue items carry the plain track id as mediaId so existing play-count reporting and `PlayerViewModel.toTrack()` reconstruction keep working unchanged.
+- **Radio icons**: `res/drawable/ic_radio_on.xml` (filled) / `ic_radio_off.xml` (outline) back the `CommandButton`.
+- **API was already complete**: all three endpoints existed before this pass; only the Android side was implemented.

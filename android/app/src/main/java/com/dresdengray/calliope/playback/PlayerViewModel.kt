@@ -2,19 +2,15 @@ package com.dresdengray.calliope.playback
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
-import android.os.Bundle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.dresdengray.calliope.data.api.CalliopeApi
 import com.dresdengray.calliope.data.api.model.Track
 import com.dresdengray.calliope.data.db.DownloadedTrackDao
-import com.dresdengray.calliope.util.Constants
 import com.dresdengray.calliope.util.NetworkMonitor
 import java.io.File
 import com.google.common.util.concurrent.ListenableFuture
@@ -45,7 +41,8 @@ class PlayerViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloadedTrackDao: DownloadedTrackDao,
     private val networkMonitor: NetworkMonitor,
-    private val api: CalliopeApi
+    private val api: CalliopeApi,
+    private val radioExtender: RadioQueueExtender
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -263,20 +260,13 @@ class PlayerViewModel @Inject constructor(
         val remaining = controller.mediaItemCount - controller.currentMediaItemIndex - 1
         if (remaining > 1) return
         viewModelScope.launch {
-            runCatching { api.getSimilarTracks(currentTrackId, limit = 10) }
-                .onSuccess { similar ->
-                    val existingIds = _queueTracks.map { it.id }.toSet()
-                    val toAppend = similar.filter { it.id !in existingIds }.take(5)
-                    if (toAppend.isEmpty()) return@onSuccess
-                    val items = toAppend.map { track ->
-                        val local = downloadedTrackDao.findDoneByTrackId(track.id.toLong())
-                        val localPath = local?.filePath?.takeIf { File(it).exists() }
-                        track.toMediaItem(localFilePath = localPath)
-                    }
-                    _queueTracks.addAll(toAppend)
-                    _uiState.update { it.copy(queueTracks = _queueTracks.toList()) }
-                    items.forEach { controller.addMediaItem(it) }
-                }
+            val existingIds = _queueTracks.map { it.id }.toSet()
+            val toAppend = radioExtender.nextTracks(currentTrackId, existingIds, max = 5)
+            if (toAppend.isEmpty()) return@launch
+            val items = toAppend.map { radioExtender.toMediaItem(it) }
+            _queueTracks.addAll(toAppend)
+            _uiState.update { it.copy(queueTracks = _queueTracks.toList()) }
+            items.forEach { controller.addMediaItem(it) }
         }
     }
 
@@ -312,30 +302,6 @@ class PlayerViewModel @Inject constructor(
 // ---------------------------------------------------------------------------
 // Extension helpers
 // ---------------------------------------------------------------------------
-
-private fun Track.toMediaItem(localFilePath: String? = null): MediaItem {
-    val uri = if (localFilePath != null) Uri.fromFile(File(localFilePath))
-              else Uri.parse(Constants.streamUrl(id))
-    val extras = Bundle().apply {
-        putInt("albumId", albumId)
-        putInt("artistId", artistId)
-        putString("albumTitle", albumTitle)
-        putString("artistName", artistName)
-    }
-    return MediaItem.Builder()
-        .setUri(uri)
-        .setMediaId(id.toString())
-        .setMediaMetadata(
-            MediaMetadata.Builder()
-                .setTitle(title)
-                .setArtist(artistName)
-                .setAlbumTitle(albumTitle)
-                .setArtworkUri(Uri.parse(Constants.albumArtUrl(albumId)))
-                .setExtras(extras)
-                .build()
-        )
-        .build()
-}
 
 /** Reconstruct a lightweight Track from MediaItem metadata (used when ViewModel queue is lost). */
 private fun MediaItem.toTrack(): Track {

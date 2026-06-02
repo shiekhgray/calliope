@@ -60,8 +60,11 @@
 
 ## Later
 - [x] [Playlist Mosaic Banner](prd/playlist-mosaic-banner.md) — full-width hero of album art at top of playlist detail page; density gradient left→right; 2×2 squares for high-frequency albums; dark→transparent background
-- [ ] [Android Home Screen Redesign](prd/android-home-screen.md) — Home tab replaces Library tab; shows Now Playing when playing, Library when idle; Stop button in transport row; gear icon → settings sheet (Change Password, Sound Matching 9-slider, Sign Out)
-      Note: PRD complete. No code written yet. Verify POST /auth/change-password exists on API before implementing settings sheet.
+- [x] [Android Home Screen Redesign](prd/android-home-screen.md) — Home tab replaces Library tab; shows Now Playing when playing, Library when idle; Stop button in transport row; gear icon → settings sheet (Change Password, Sound Matching 9-slider, Sign Out)
 - [ ] [Android Auto](prd/android-auto.md) — full browse tree, radio mode, offline playback
-      Note: API endpoints done — GET /tracks?sort=play_count&limit=N added; GET /artists/{id}/top-tracks fixed (album_artists join, configurable limit). Android implementation pending.
+      Note: API endpoints done — GET /tracks?sort=play_count&limit=N added; GET /artists/{id}/top-tracks fixed (album_artists join, configurable limit).
+      Android implementation DONE (pending on-device build/test): MusicService.libraryCallback fully implemented (onGetChildren/onGetItem/onSetMediaItems/onAddMediaItems);
+        node-ID browse tree + queue building (MediaItems.kt/BrowseTree); RadioQueueExtender shared by MusicService + PlayerViewModel (default ON for Auto-initiated playback only,
+        gated on autoInitiatedPlayback via controller.packageName); radio toggle CommandButton in customLayout (ic_radio_on/off drawables); offline file substitution; kotlinx-coroutines-guava added.
+      Remaining: build APK on Windows toolchain, sideload, and test on both cars (wired + wireless).
 - [ ] [Phase 6: Polish & Search](prd/phase6-polish.md)
