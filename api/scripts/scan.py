@@ -31,6 +31,12 @@ from app import models
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav"}
 IGNORED_NAMES = {"desktop.ini", ".ds_store", "thumbs.db"}
 
+# Optional per-album marker dropped by importers (e.g. qobuz_import.py --loose)
+# to seed album_type. Applied only when the album is first created — never
+# overrides a later manual change via PATCH /albums/{id}/type.
+ALBUM_TYPE_MARKER = ".album_type"
+VALID_ALBUM_TYPES = {"album", "ep", "single"}
+
 
 # ---------------------------------------------------------------------------
 # Cover art resolution
@@ -56,6 +62,15 @@ def find_cover_art(album_dir: Path, music_root: Path) -> str | None:
         return str(sorted(jpg_files)[0].relative_to(music_root))
 
     return None
+
+
+def read_album_type(album_dir: Path) -> str | None:
+    """Return the album_type from a `.album_type` marker file, or None if absent/invalid."""
+    marker = album_dir / ALBUM_TYPE_MARKER
+    if not marker.is_file():
+        return None
+    value = marker.read_text(encoding="utf-8").strip().lower()
+    return value if value in VALID_ALBUM_TYPES else None
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +181,7 @@ def upsert_album(
     title: str,
     year: int | None,
     cover_art_path: str | None,
+    album_type: str | None = None,
 ) -> models.Album:
     album = db.query(models.Album).filter_by(artist_id=artist.id, title=title).first()
     if not album:
@@ -175,6 +191,10 @@ def upsert_album(
             year=year,
             cover_art_path=cover_art_path,
         )
+        # Seed album_type from importer marker on creation only; rescans must
+        # not clobber a later manual change via PATCH /albums/{id}/type.
+        if album_type:
+            album.album_type = album_type
         db.add(album)
         db.flush()
     else:
@@ -266,6 +286,7 @@ def scan(music_root: Path):
 
                 album_title = album_dir.name
                 cover_art = find_cover_art(album_dir, music_root)
+                marker_album_type = read_album_type(album_dir)
                 album_obj = None  # lazy
                 artist_obj = None  # reset per album so albumartist tag is re-evaluated
 
@@ -291,7 +312,8 @@ def scan(music_root: Path):
 
                     if album_obj is None:
                         album_obj = upsert_album(
-                            db, artist_obj, effective_album, tags["year"], cover_art
+                            db, artist_obj, effective_album, tags["year"], cover_art,
+                            album_type=marker_album_type,
                         )
                         counts["albums"] += 1
 

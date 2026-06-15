@@ -18,10 +18,19 @@ from app.config import settings
 router = APIRouter(prefix="/import", tags=["import"])
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus"}
+# Bare audio files (not zips) treated as single-track releases. .flac is
+# transcoded to MP3 V0; the rest are stored as-is.
+LOOSE_SINGLE_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac"}
 
 
 def _primary_artist(albumartist: str) -> str:
     return re.split(r",\s*|\sfeat\.\s*", albumartist, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+
+
+def _write_single_marker(dest_dir: Path):
+    """Drop a `.album_type` marker so the scanner tags this album 'single' on
+    first creation. Mirrors scripts/qobuz_import.py --loose."""
+    (dest_dir / ".album_type").write_text("single\n", encoding="utf-8")
 
 
 def _process_audio_single(filename: str, data: bytes, music_root: Path) -> dict:
@@ -41,9 +50,26 @@ def _process_audio_single(filename: str, data: bytes, music_root: Path) -> dict:
 
     artist = _primary_artist(raw_artist)
     dest_dir = music_root / artist / album
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    (dest_dir / filename).write_bytes(data)
+    base_name = Path(filename).name
+    is_flac = Path(base_name).suffix.lower() == ".flac"
 
+    if is_flac and not shutil.which("ffmpeg"):
+        return {"filename": filename, "status": "error", "message": "ffmpeg not found in container — rebuild the API image."}
+
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    if is_flac:
+        dest_name = Path(base_name).with_suffix(".mp3").name
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp_flac = Path(tmp) / base_name
+                tmp_flac.write_bytes(data)
+                _transcode_flac_to_mp3(tmp_flac, dest_dir / dest_name)
+        except subprocess.CalledProcessError as e:
+            return {"filename": filename, "status": "error", "message": f"ffmpeg transcoding failed: {e}"}
+    else:
+        (dest_dir / base_name).write_bytes(data)
+
+    _write_single_marker(dest_dir)
     return {"filename": filename, "status": "ok", "artist": artist, "album": album, "tracks_imported": 1}
 
 
@@ -184,7 +210,7 @@ async def upload_import(
     for f in files:
         data = await f.read()
         fname = f.filename or "unknown"
-        if Path(fname).suffix.lower() in {".mp3", ".m4a", ".wav"}:
+        if Path(fname).suffix.lower() in LOOSE_SINGLE_EXTENSIONS:
             result = _process_audio_single(fname, data, music_root)
         else:
             result = _process_zip(fname, data, music_root)

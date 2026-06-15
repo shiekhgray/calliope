@@ -12,7 +12,7 @@ description: Scan ~/Music/ for new albums (zips or directories), extract/copy th
 Scan results from staging area:
 - Zip files: !`find ~/Music -maxdepth 2 -name "*.zip" 2>/dev/null`
 - Loose directories (non-zip folders with audio): !`find ~/Music -mindepth 2 -maxdepth 2 -type d 2>/dev/null`
-- Loose singles (bare audio files at root of staging area): !`find ~/Music -maxdepth 1 \( -name "*.mp3" -o -name "*.m4a" \) 2>/dev/null`
+- Loose singles (bare audio files at root of staging area): !`find ~/Music -maxdepth 1 \( -name "*.mp3" -o -name "*.m4a" -o -name "*.flac" \) 2>/dev/null`
 - Current library artists: !`ls /var/www/html/calliope/music/ | sort`
 
 ## Your task
@@ -26,7 +26,8 @@ Scan results from staging area:
 4. **On confirmation**, for each item:
    - Zip files: extract with `unzip -d /var/www/html/calliope/music <zipfile>`
    - Loose directories: copy with `cp -r` to the correct Artist/ subdirectory under the library root
-   - Bare singles: use `python3 $(git rev-parse --show-toplevel)/scripts/amazon_import.py --loose <audio_file> [cover.jpg]` — if a `cover.jpg` exists alongside the single in the staging area, pass it as the second argument
+   - Bare singles (`.mp3`/`.m4a`): use `python3 $(git rev-parse --show-toplevel)/scripts/amazon_import.py --loose <audio_file> [cover.jpg]` — if a `cover.jpg` exists alongside the single in the staging area, pass it as the second argument
+   - Bare singles (`.flac`, e.g. Qobuz): use `python3 $(git rev-parse --show-toplevel)/scripts/qobuz_import.py --loose <audio_file> [cover.jpg]` — same args; the FLAC is transcoded to MP3 V0 before placement (ffmpeg required)
    - After all items are imported, run the scanner: `docker compose -f $(git rev-parse --show-toplevel)/docker-compose.yml exec api python scripts/scan.py`
 
 5. **Report** the before/after track counts from the scanner output, and note any filenames with `__` (Amazon's substitute for `/` in track titles) that the user may want to verify have correct ID3 tags.

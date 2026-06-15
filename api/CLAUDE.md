@@ -41,6 +41,8 @@ Walks `Artist/Album/Track`. Fully idempotent. Never touches `play_count`.
 
 Script must live at `api/scripts/scan.py` (inside the Docker build context). Moving it outside `api/` causes "No such file or directory" at runtime.
 
+- **`.album_type` marker**: an album dir may contain a hidden `.album_type` file (value `album`/`ep`/`single`) dropped by importers — e.g. `scripts/qobuz_import.py --loose` writes `single`. The scanner applies it **only when first creating the album**, so a later manual change via PATCH `/albums/{id}/type` is never clobbered on rescan. Empty suffix → never treated as a track or cover.
+
 ## Migrations
 
 Applied: **0001–0012**. Next number: **0013**.
@@ -66,7 +68,7 @@ Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overr
 
 - **Bandcamp**: flat zip + `Artist - Album.zip` filename. Strips `Artist - Album - ` prefix from track names. `cover.jpg` → `Folder.jpg`.
 - **Amazon**: two-level subdirectory structure (`Artist/Album/track.mp3`). Decodes `__` → `/` in directory and file names. Copies any image file found at the album level.
-- **Qobuz**: one-level subdirectory `Artist - Album/NN Title.flac`. FLACs transcoded to MP3 V0 (~245kbps) via ffmpeg subprocess. No cover art in Qobuz zips. ffmpeg is installed in the API Docker image.
+- **Qobuz**: one-level subdirectory `Artist - Album/NN Title.flac`. FLACs transcoded to MP3 V0 (~245kbps) via ffmpeg subprocess. No cover art in Qobuz zips. ffmpeg is installed in the API Docker image. Loose singles (bare `.flac`) via host-side `scripts/qobuz_import.py --loose` — tag-based placement, transcode, and drops a `.album_type=single` marker (see scanner notes).
 - If no pattern matches, returns an error describing all three expected formats.
 
 ## Similarity Query
