@@ -16,6 +16,7 @@
 - [x] [Track Credits](prd/track-credits.md) — many-to-many `album_artists` + `track_credits`; migration 0008 applied to prod
 - [x] Album header artist links — clickable artist names on AlbumPage (one per `album_artists` row, falls back to `album.artist_id`)
 - [x] Qobuz zip import support — `scripts/qobuz_import.py` + web import pipeline; ffmpeg in api image
+- [x] Loose FLAC single import — `qobuz_import.py --loose <track.flac>` (tag-based placement + FLAC→MP3 transcode); web /import/upload + ImportPage accept .flac; all loose singles drop a `.album_type=single` marker that the scanner reads on album creation only (never clobbers manual type changes)
 - [x] Search Screen (Android) — Phase 5 substep; debounced query, recent chips, three-section results
 
 ## In Progress
@@ -67,4 +68,6 @@
         node-ID browse tree + queue building (MediaItems.kt/BrowseTree); RadioQueueExtender shared by MusicService + PlayerViewModel (default ON for Auto-initiated playback only,
         gated on autoInitiatedPlayback via controller.packageName); radio toggle CommandButton in customLayout (ic_radio_on/off drawables); offline file substitution; kotlinx-coroutines-guava added.
       Remaining: build APK on Windows toolchain, sideload, and test on both cars (wired + wireless).
+- [ ] [Android Auto Voice Search](prd/android-auto-voice-search.md) — voice "Play X on Calliope" + in-car search UI
+      Wires Media3 searchQuery (onSetMediaItems) + onSearch/onGetSearchResult to existing GET /search; no API changes.
 - [ ] [Phase 6: Polish & Search](prd/phase6-polish.md)

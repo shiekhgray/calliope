@@ -33,7 +33,7 @@ web/src/
     ReleasesPage             ← iTunes discovery; filter + sort; dismiss per card
     NowPlayingPage           ← /now-playing; large art, scrubber, queue context, similar tracks
     CompilationsPage         ← /compilations; VA album grid
-    ImportPage               ← /import; drag-and-drop zip; Bandcamp + Amazon; progress bar
+    ImportPage               ← /import; drag-and-drop zip; Bandcamp + Amazon + Qobuz zips; loose MP3/M4A/FLAC singles (FLAC transcoded server-side); progress bar
 ```
 
 ## Key Conventions
