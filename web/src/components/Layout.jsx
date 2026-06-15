@@ -109,6 +109,7 @@ export default function Layout() {
           <NavLink to="/playlists">Playlists</NavLink>
           <NavLink to="/releases">Releases</NavLink>
           <NavLink to="/compilations">Compilations</NavLink>
+          <NavLink to="/map">Map</NavLink>
         </div>
         <UserMenu username={username} onLogout={handleLogout} />
       </nav>

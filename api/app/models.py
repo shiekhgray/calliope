@@ -185,6 +185,18 @@ class VectorNormParams(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class TrackMapCoords(Base):
+    __tablename__ = "track_map_coords"
+
+    track_id = Column(Integer, ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True)
+    x = Column(Float, nullable=False)
+    y = Column(Float, nullable=False)
+    cluster_id = Column(Integer, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    track = relationship("Track")
+
+
 class PlaylistTrack(Base):
     __tablename__ = "playlist_tracks"
 

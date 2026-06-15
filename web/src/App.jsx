@@ -12,6 +12,7 @@ import ReleasesPage from './pages/ReleasesPage'
 import NowPlayingPage from './pages/NowPlayingPage'
 import CompilationsPage from './pages/CompilationsPage'
 import ImportPage from './pages/ImportPage'
+import MapPage from './pages/MapPage'
 
 function RequireAuth({ children }) {
   const { loggedIn } = useAuth()
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="playlists/:id" element={<PlaylistPage />} />
         <Route path="releases" element={<ReleasesPage />} />
         <Route path="compilations" element={<CompilationsPage />} />
+        <Route path="map" element={<MapPage />} />
         <Route path="now-playing" element={<NowPlayingPage />} />
         <Route path="import" element={<ImportPage />} />
       </Route>

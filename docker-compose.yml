@@ -55,6 +55,8 @@ services:
       MUSIC_ROOT: /music
     volumes:
       - /backup/calliope/music:/music:ro
+      - indexer_data:/data
 
 volumes:
   pg_data:
+  indexer_data:

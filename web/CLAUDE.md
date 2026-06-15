@@ -34,6 +34,7 @@ web/src/
     NowPlayingPage           ← /now-playing; large art, scrubber, queue context, similar tracks
     CompilationsPage         ← /compilations; VA album grid
     ImportPage               ← /import; drag-and-drop zip; Bandcamp + Amazon + Qobuz zips; loose MP3/M4A/FLAC singles (FLAC transcoded server-side); progress bar
+    MapPage                  ← /map; Music Map. Canvas 2-D scatter (no regl/webgl dep — chosen to avoid a container rebuild; smooth at ~3k pts). Pan (drag) / zoom (wheel) / hover tooltip w/ lazy album art / click-to-play. Lens selector: Clusters (stored cluster_id, or live recolor) / Single feature (viridis ramp via /map/lens) / 3-PC gestalt (/map/pca rgb). "Tune weights" panel embeds the Sound Matching sliders → debounced GET /map/clusters?weighted&w= live recolor; Save → PUT /auth/similarity-weights. Now-playing track + /similar neighbors highlighted (ring + dim others).
 ```
 
 ## Key Conventions
@@ -118,4 +119,8 @@ URL format: `{origin}/calliope/albums/{id}?play={trackId}&note={artist}_{album}`
 | `['artist-singles', id]` | Singles & EPs for artist — from GET /artists/{id}/singles |
 | `['me']` | Current user profile + similarity weights — staleTime: Infinity; invalidated on weight save |
 | `['album-genres', albumId]` | Committed genres for an album — invalidated on POST/DELETE genre |
+| `['map']` | All Music Map atlas points (GET /map) — staleTime 5min |
+| `['map-lens', feature]` | Single-feature gradient values (GET /map/lens) — enabled only on the feature lens |
+| `['map-pca']` | 3-PC gestalt rgb values (GET /map/pca) — enabled only on the gestalt lens |
+| `['map-similar', trackId]` | Now-playing radio neighborhood for the map highlight (GET /tracks/{id}/similar) |
 | `['users']` | All users `[{id, username}]` — used in PlaylistPage for permissions panel user picker and owner name display |

@@ -3,3 +3,5 @@ psycopg2-binary==2.9.10
 pgvector==0.3.6
 librosa==0.10.2
 numpy==1.26.4
+umap-learn==0.5.6
+scikit-learn==1.5.2  # umap-learn 0.5.6 calls check_array(force_all_finite=); removed in sklearn 1.7+

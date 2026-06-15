@@ -1,8 +1,9 @@
 """Plain Python stdlib HTTP server for the similarity indexer.
 
 Routes:
-    POST /index  — start indexing (202 Accepted, 409 if already running)
-    GET  /status — {"running": bool, "indexed": int, "to_index": int}
+    POST /index       — start indexing (202 Accepted, 409 if already running)
+    GET  /status      — {"running": bool, "indexed": int, "to_index": int}
+    POST /map/rebuild — full UMAP re-fit of the Music Map atlas (202, 409 if busy)
 """
 import json
 import sys
@@ -35,6 +36,20 @@ def _run():
         _running = False
 
 
+def _run_map_rebuild():
+    global _running
+    try:
+        from sqlalchemy.orm import Session
+        from .database import engine
+        from .mapping import build_map
+        with Session(engine) as db:
+            build_map(db, full_refit=True)
+    except Exception as e:
+        print(f"Map rebuild fatal error: {e}", file=sys.stderr, flush=True)
+    finally:
+        _running = False
+
+
 class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -49,7 +64,7 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         global _running
-        if self.path != "/index":
+        if self.path not in ("/index", "/map/rebuild"):
             self._json(404, {"error": "not found"})
             return
         with _lock:
@@ -57,8 +72,12 @@ class _Handler(BaseHTTPRequestHandler):
                 self._json(409, {"error": "already running"})
                 return
             _running = True
-        threading.Thread(target=_run, daemon=True).start()
-        self._json(202, {"status": "indexing started"})
+        if self.path == "/map/rebuild":
+            threading.Thread(target=_run_map_rebuild, daemon=True).start()
+            self._json(202, {"status": "map rebuild started"})
+        else:
+            threading.Thread(target=_run, daemon=True).start()
+            self._json(202, {"status": "indexing started"})
 
     def do_GET(self):
         if self.path != "/status":

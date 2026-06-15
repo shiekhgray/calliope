@@ -18,6 +18,7 @@ docker compose exec api alembic upgrade head
 | `search.py` | GET /search?q= (unaccent), GET/POST /search/history (auth; upsert + prune to 10) |
 | `playlists.py` | Full CRUD + add/remove/reorder tracks + similar; all endpoints require auth; GET /playlists and GET /playlists/{id} gate by can_view; track mutations gate by can_edit; DELETE is owner-only; GET /playlists returns enriched card data: art_tracks (0–4, centroid-based 2-pass selection), preview_tracks (first 3 titles), top_genres (top 4 by frequency), track_count |
 | `users.py` | GET /users (auth required) — returns [{id, username}] for all users |
+| `map.py` | GET /map (all atlas points + hover metadata + default cluster), GET /map/clusters?weighted=&w= (live KMeans recolor under saved or `w=`-overridden weights; {track_id: cluster_id}), GET /map/lens?feature= (z-scored group mean, 0–1), GET /map/pca (top-3 PCs → per-track [r,g,b] 0–1). All auth. Music Map feature. |
 | `scanner.py` | POST /scanner/trigger (auth, 409 if running), GET /scanner/status — two phases: scan + index |
 | `discover.py` | POST /discover/refresh, GET /discover/status, GET /discover(?artist_id=), POST /discover/{id}/dismiss, GET /discover/{id}/genres/fetch (Last.fm album.getInfo; read-only, nothing persisted) |
 | `compilations.py` | GET /compilations |
@@ -45,7 +46,7 @@ Script must live at `api/scripts/scan.py` (inside the Docker build context). Mov
 
 ## Migrations
 
-Applied: **0001–0012**. Next number: **0013**.
+Applied: **0001–0013**. Next number: **0014**.
 
 | File | Change |
 |---|---|
@@ -61,6 +62,7 @@ Applied: **0001–0012**. Next number: **0013**.
 | 0010_vector_expansion | Drops HNSW, truncates `track_vectors` + `vector_norm_params`, alters `feature_vector` to `vector(60)`, recreates HNSW |
 | 0011_add_similarity_weights | 9 `sim_weight_*` columns on `users` (INTEGER NOT NULL DEFAULT 5): timbre, timbral_variation, harmony, chord_movement, tempo, loudness, dynamic_range, brightness, tonal |
 | 0012_add_playlist_permissions | `view_mode VARCHAR(10) DEFAULT 'everyone'`, `edit_mode VARCHAR(10) DEFAULT 'owner'` on `playlists`; new tables `playlist_viewers (playlist_id, user_id)`, `playlist_editors (playlist_id, user_id)` with cascade-delete FKs |
+| 0013_add_track_map_coords | `track_map_coords (track_id PK→tracks cascade, x REAL, y REAL, cluster_id INT, updated_at)` — Music Map atlas; positions written by the indexer's UMAP step |
 
 Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overridden at runtime via `env.py`. Do not add a value there.
 
@@ -86,6 +88,8 @@ Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overr
 Genre writes (`POST /albums/{id}/genres`) normalize to lowercase before upsert. Both authenticated users (not owner-only) can tag — deliberate, see PRD.
 
 `GET /albums/{id}/genres/suggest` reuses the same z-score + L2-normalize pipeline as `/tracks/{id}/similar` but lives in `albums.py`, not `tracks.py`. It has its own copy of `DIM_SLICES` (same values).
+
+The Music Map endpoints in `map.py` also carry their own copy of `DIM_SLICES` (same values) and reuse the identical z-score → per-group `w/5.0` scaling → L2-normalize preprocessing. `/map/clusters` and the indexer's offline default clustering share a compact deterministic k-means++ (`_kmeans`, 16 clusters, centroid-sorted ids for stable hues) so neutral-weight colors line up between offline and online. There are now **four** copies of `DIM_SLICES` (tracks, albums, playlists, map) — keep them in sync if dims ever change.
 
 ## Search
 

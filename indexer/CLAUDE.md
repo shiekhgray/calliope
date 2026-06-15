@@ -5,8 +5,9 @@ Separate Docker container (`python:3.12-slim`). Runs on port 8001. Does NOT serv
 ## HTTP API
 
 ```
-POST /index   — start indexing; 202 Accepted, 409 if already running
-GET  /status  — {"running": bool, "indexed": int, "to_index": int}
+POST /index       — start indexing; 202 Accepted, 409 if already running
+GET  /status      — {"running": bool, "indexed": int, "to_index": int}
+POST /map/rebuild — full UMAP re-fit of the Music Map atlas; 202, 409 if busy
 ```
 
 Plain Python stdlib `http.server` — no FastAPI, no external HTTP framework. Thread-safety via a module-level `_lock` + `_running` bool.
@@ -36,6 +37,7 @@ Expanded from 38→60 dims via migration 0010 (breaking: track_vectors truncated
 ```
 track_vectors      track_id (PK FK→tracks), feature_vector vector(60), file_mtime bigint
 vector_norm_params id (always 1), means float[60], stds float[60], updated_at
+track_map_coords   track_id (PK FK→tracks), x REAL, y REAL, cluster_id int, updated_at  (Music Map; written by mapping.py)
 ```
 
 HNSW cosine index on `track_vectors(feature_vector)` — created in migration 0006. Currently unused at query time (API does brute-force numpy); forward-looking for when the library grows.
@@ -49,6 +51,17 @@ HNSW cosine index on `track_vectors(feature_vector)` — created in migration 00
 4. After batch: recomputes `VectorNormParams` from all rows (z-score means/stds)
 
 Vectors are stored **raw** (unnormalized). Normalization is applied at query time in the API.
+
+## Music Map Atlas (`mapping.py`)
+
+`build_map(db, full_refit)` projects the 60-dim vectors to fixed 2-D coordinates and stores them in `track_map_coords` (migration 0013). Called automatically at the end of `run_indexing()` with `full_refit=False`; the manual `POST /map/rebuild` runs it with `full_refit=True`.
+
+- Preprocessing mirrors the similarity engine: z-score via `vector_norm_params` (neutral weights) → L2-normalize → UMAP `metric="euclidean"` (L2-norm makes euclidean ≈ the cosine the engine uses).
+- **Full refit:** `UMAP(n_neighbors=15, min_dist=0.1, n_components=2).fit_transform(...)`, pickle the model to `MAP_MODEL_PATH` (default `/data/umap_model.pkl`, backed by the `indexer_data` docker volume).
+- **Incremental:** `reducer.transform()` only tracks missing from `track_map_coords` — frozen geography, cheap. Existing points keep their coords; only `cluster_id` is refreshed.
+- Default `cluster_id`: compact deterministic k-means++ (`kmeans()`, 16 clusters) on the full 60-D z-scored+L2 space. Mirrored by the API's `_kmeans` in `map.py` so neutral-weight colors line up (note: k-means label identity is sensitive to track-count drift between a full refit and a later live recompute — call-to-call determinism for a fixed input is what's guaranteed).
+- **Query via the `TrackVector` ORM model, not raw `text()` SQL** — pgvector deserializes the vector column to a list only through the ORM; raw SQL returns it as a string (same gotcha as `_recompute_norm_params`).
+- **`umap-learn 0.5.6` requires `scikit-learn < 1.7`** (it calls `check_array(force_all_finite=)`, removed in sklearn 1.7). `scikit-learn==1.5.2` is pinned in `requirements.txt` for this reason.
 
 ## Normalization (Query Side, in API)
 

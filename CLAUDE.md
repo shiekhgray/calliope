@@ -98,6 +98,8 @@ search_history     id, user_id, entity_type ('artist'|'album'|'track'), entity_i
 track_vectors      track_id (FK unique), feature_vector vector(60), file_mtime bigint
                    (expanded 38→60 dims in migration 0010; HNSW index on feature_vector)
 vector_norm_params id (always 1), means float[60], stds float[60], updated_at
+track_map_coords   track_id (FK→tracks, cascade), x REAL, y REAL, cluster_id int, updated_at
+                   (migration 0013; Music Map 2-D atlas — positions from indexer UMAP step)
 ```
 
 - `cover_art_path` is relative from music root; served via API (no direct filesystem exposure)

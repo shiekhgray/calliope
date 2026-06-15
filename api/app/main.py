@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from app.routers import artists, albums, tracks, genres, search, playlists, auth, scanner, discover, compilations, import_music, credits, users
+from app.routers import map as map_router
 
 app = FastAPI(title="Calliope", version="2.0.0")
 
@@ -17,6 +18,7 @@ app.include_router(compilations.router)
 app.include_router(import_music.router)
 app.include_router(credits.router)
 app.include_router(users.router)
+app.include_router(map_router.router)
 
 
 @app.get("/health")

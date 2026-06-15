@@ -104,6 +104,14 @@ def run_indexing(update_status):
         _recompute_norm_params(db)
         db.commit()
 
+        # Keep the Music Map atlas current: place any new tracks into the frozen
+        # UMAP embedding (cheap) and refresh default clusters.
+        try:
+            from .mapping import build_map
+            build_map(db, full_refit=False)
+        except Exception as e:
+            print(f"Indexer: map build failed: {e}", file=sys.stderr, flush=True)
+
     print("Indexer: done", flush=True)
 
 
