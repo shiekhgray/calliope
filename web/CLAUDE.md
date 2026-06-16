@@ -21,6 +21,7 @@ web/src/
     AddToPlaylistMenu.jsx    ← "+" popover on every track row
     ChangePasswordModal.jsx
     SimilarityWeightsModal.jsx  ← 3 groups × 3 sliders; PUT /auth/similarity-weights; opened from user menu "Sound Matching"
+    RadioModesModal.jsx         ← radio-group of 4 continuation modes + Variety slider; PUT /auth/radio-settings; opened from user menu "Radio Modes"
     PlaylistMosaicBanner.jsx    ← full-width 174px hero above PlaylistPage content; bin-packs album art left→right with squared-exponential density; col-first scan; top-25% albums get 2×2 slots
     ReleaseCardGenres.jsx       ← "Genres" toggle button + chip display for discovery cards; used in both ReleasesPage and ArtistPage (Missing Releases section)
   pages/
@@ -71,6 +72,7 @@ web/src/
 
 - `history` is pushed on `onended` and `skipNext`; reset on `playTrack`
 - Radio mode extends the queue when it empties (via `onended`) or `skipNext` is called at end of queue
+- **Radio continuation algorithm**: `_extendWithRadio` POSTs `/radio/next` (not `/tracks/{id}/similar`). The selected mode + variety come from `['me']` (`radio_mode`/`radio_variety`), mirrored into `radioAlgoRef`/`radioVarietyRef`. Session state held in refs: `anchorRef` (track that started the station — pinned on the first extension after a manual play), `sourceAlbumRef` (album excluded from radio), `radiusRef` (ripple state echoed to/from the server). All three reset in `playTrack`. The on/off toggle (`radioModeRef`/localStorage) is unchanged.
 - `onended` fires POST `/tracks/{id}/played` — fire-and-forget, errors swallowed
 - **StrictMode + nested setState hazard**: `<StrictMode>` double-invokes functional updaters. Calling `setState` inside another `setState`'s updater causes the inner dispatch to fire twice, with React processing both sequentially. In `onended` this meant `queueIndex` incremented by 2 (skipping every other track). Fix: `queueRef`/`queueIndexRef`/`currentTrackRef` mirror state; all event handlers read refs and call flat (non-nested) setters via `_setQueue`/`_setQueueIndex`/`_setCurrentTrack` wrappers.
 - **Tab discard survival**: `PlayerContext` holds a Web Lock (`navigator.locks`, `'calliope-player'`) to hint Chrome not to discard the tab. State is also saved to `sessionStorage` (`'calliope-player-state'`) on `visibilitychange`/`pagehide` and restored on mount — audio src is reloaded and seeks to saved position, `isPlaying` is set to `false` (not `null`) so PlayerBar renders. `playTrack()` clears saved state to prevent stale restore racing a fresh play.

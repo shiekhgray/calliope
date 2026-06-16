@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 
 const PlayerContext = createContext(null)
@@ -41,6 +42,28 @@ export function PlayerProvider({ children }) {
 
   // Track IDs played since last manual playTrack() call — used to avoid repeats in radio
   const sessionPlayedRef = useRef(new Set())
+
+  // Radio continuation state (selectable modes). The anchor is the track that
+  // started the station — set on the first radio extension after a manual play.
+  // radius is ripple-mode state echoed to/from POST /radio/next.
+  const anchorRef = useRef(null)        // track id that started the station
+  const sourceAlbumRef = useRef(null)   // album playing when radio kicked in
+  const radiusRef = useRef(null)        // ripple radius; null until first hop
+
+  // Selected algorithm + variety, mirrored from ['me'] into refs so the
+  // (non-reactive) onended/_extendWithRadio handlers can read current values.
+  const radioAlgoRef = useRef('classic')
+  const radioVarietyRef = useRef(0)
+  const { data: me } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => api.get('/auth/me').then((r) => r.data),
+    staleTime: Infinity,
+  })
+  useEffect(() => {
+    if (!me) return
+    radioAlgoRef.current = me.radio_mode ?? 'classic'
+    radioVarietyRef.current = me.radio_variety ?? 0
+  }, [me])
 
   // Play history — most-recent first, capped at 10
   const [history, setHistory] = useState([])
@@ -112,19 +135,30 @@ export function PlayerProvider({ children }) {
     const ct = currentTrackRef.current
     if (!ct) return
     sessionPlayedRef.current.add(ct.id)
-    const seedAlbumId = ct.album_id
-    api.get(`/tracks/${ct.id}/similar?limit=25`)
+    // First extension of the session: pin the anchor + source album.
+    if (anchorRef.current == null) {
+      anchorRef.current = ct.id
+      sourceAlbumRef.current = ct.album_id
+      radiusRef.current = null
+    }
+    api.post('/radio/next', {
+      mode: radioAlgoRef.current,
+      anchor_id: anchorRef.current,
+      last_id: ct.id,
+      played_ids: [...sessionPlayedRef.current],
+      radius: radiusRef.current,
+      source_album_id: sourceAlbumRef.current,
+      variety: radioVarietyRef.current,
+    })
       .then((res) => {
-        const candidates = res.data.filter(
-          (t) => !sessionPlayedRef.current.has(t.id) && t.album_id !== seedAlbumId
-        )
-        if (candidates.length > 0) {
-          const next = candidates[0]
-          const newQueue = [...queueRef.current, next]
-          _setQueue(newQueue)
-          _setQueueIndex(newQueue.length - 1)
-          _loadTrack(next)
-        }
+        // 204 No Content → no candidate left; stop, same as before.
+        if (!res.data || !res.data.track) return
+        radiusRef.current = res.data.radius ?? radiusRef.current
+        const next = res.data.track
+        const newQueue = [...queueRef.current, next]
+        _setQueue(newQueue)
+        _setQueueIndex(newQueue.length - 1)
+        _loadTrack(next)
       })
       .catch(() => {})
   }
@@ -142,6 +176,9 @@ export function PlayerProvider({ children }) {
     saved.current = null
     // Reset session tracking and history on every manual play
     sessionPlayedRef.current = new Set([track.id])
+    anchorRef.current = null
+    sourceAlbumRef.current = null
+    radiusRef.current = null
     setHistory([])
     const list = trackList.length ? trackList : [track]
     const idx = list.findIndex((t) => t.id === track.id)

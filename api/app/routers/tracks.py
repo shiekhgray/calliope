@@ -12,6 +12,7 @@ from app.config import settings
 from app.database import get_db
 from app import models
 from app.auth import get_current_user
+from app.similarity import enrich_tracks, load_weighted_matrix
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 
@@ -110,19 +111,6 @@ def mark_played(
     return {"play_count": track.play_count}
 
 
-DIM_SLICES = {
-    "timbre":            slice(0, 13),
-    "timbral_variation": slice(13, 26),
-    "harmony":           slice(26, 38),
-    "chord_movement":    slice(38, 50),
-    "tempo":             slice(50, 51),
-    "loudness":          slice(51, 52),
-    "dynamic_range":     slice(52, 53),
-    "brightness":        slice(53, 54),
-    "tonal":             slice(54, 60),
-}
-
-
 @router.get("/{track_id}/similar")
 def similar_tracks(
     track_id: int,
@@ -134,31 +122,9 @@ def similar_tracks(
     if not tv:
         raise HTTPException(status_code=404, detail="Track not indexed yet")
 
-    all_tv = db.query(models.TrackVector).all()
-    if len(all_tv) < 2:
+    ids, matrix = load_weighted_matrix(db, current_user)
+    if ids is None:
         return []
-
-    ids = np.array([v.track_id for v in all_tv])
-    matrix = np.array([v.feature_vector for v in all_tv], dtype=np.float32)
-
-    norm = db.get(models.VectorNormParams, 1)
-    if norm:
-        means = np.array(norm.means, dtype=np.float32)
-        stds = np.array(norm.stds, dtype=np.float32)
-        stds[stds == 0] = 1.0
-        matrix = (matrix - means) / stds
-
-    # apply per-user similarity weights after z-score, before L2 normalization
-    weights = np.ones(60, dtype=np.float32)
-    for group, sl in DIM_SLICES.items():
-        col = f"sim_weight_{group}"
-        w = float(getattr(current_user, col, 5))
-        weights[sl] *= w / 5.0
-    matrix *= weights  # broadcast: shape (N, 60)
-
-    row_norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    row_norms[row_norms == 0] = 1.0
-    matrix /= row_norms
 
     query_mask = ids == track_id
     query_vec = matrix[query_mask][0]
@@ -170,23 +136,7 @@ def similar_tracks(
     top_idx = top_idx[np.argsort(sims[top_idx])[::-1]]
     top_ids = ids[top_idx].tolist()
 
-    if not top_ids:
-        return []
-
-    rows = db.execute(
-        text("""
-            SELECT t.id, t.title, t.track_number, t.duration_ms, t.bitrate_kbps,
-                   t.format, t.play_count, t.album_id,
-                   al.title AS album_title, ar.id AS artist_id, ar.name AS artist_name
-            FROM tracks t
-            JOIN albums al ON al.id = t.album_id
-            JOIN artists ar ON ar.id = al.artist_id
-            WHERE t.id = ANY(:ids)
-        """),
-        {"ids": top_ids},
-    ).fetchall()
-
-    track_map = {row.id: dict(row._mapping) for row in rows}
+    track_map = enrich_tracks(db, top_ids)
     return [track_map[tid] for tid in top_ids if tid in track_map]
 
 
