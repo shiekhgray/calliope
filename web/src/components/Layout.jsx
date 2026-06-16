@@ -5,6 +5,7 @@ import { usePlayer } from '../player/PlayerContext'
 import PlayerBar from './PlayerBar'
 import ChangePasswordModal from './ChangePasswordModal'
 import SimilarityWeightsModal from './SimilarityWeightsModal'
+import RadioModesModal from './RadioModesModal'
 import api from '../api/client'
 import { useAlbumAccent } from '../hooks/useAlbumAccent'
 import { useSpacebarPlayback } from '../hooks/useSpacebarPlayback'
@@ -13,6 +14,7 @@ function UserMenu({ username, onLogout }) {
   const [open, setOpen] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
   const [soundMatchingOpen, setSoundMatchingOpen] = useState(false)
+  const [radioModesOpen, setRadioModesOpen] = useState(false)
   const [scanState, setScanState] = useState('idle') // idle | scanning | indexing | done
   const ref = useRef(null)
   const pollRef = useRef(null)
@@ -66,6 +68,7 @@ function UserMenu({ username, onLogout }) {
           <div className="user-menu-popup">
             <Link to="/import" onClick={() => setOpen(false)}>Import Music</Link>
             <button onClick={() => { setOpen(false); setSoundMatchingOpen(true) }}>Sound Matching</button>
+            <button onClick={() => { setOpen(false); setRadioModesOpen(true) }}>Radio Modes</button>
             <button
               onClick={startScan}
               disabled={scanState === 'scanning'}
@@ -80,6 +83,7 @@ function UserMenu({ username, onLogout }) {
       </div>
       {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} />}
       {soundMatchingOpen && <SimilarityWeightsModal onClose={() => setSoundMatchingOpen(false)} />}
+      {radioModesOpen && <RadioModesModal onClose={() => setRadioModesOpen(false)} />}
     </>
   )
 }

@@ -43,6 +43,9 @@ class User(Base):
     sim_weight_brightness        = Column(Integer, nullable=False, default=5)
     sim_weight_tonal             = Column(Integer, nullable=False, default=5)
 
+    radio_mode    = Column(String(16), nullable=False, default="classic")
+    radio_variety = Column(Integer, nullable=False, default=0)
+
     playlists = relationship("Playlist", back_populates="owner")
 
 

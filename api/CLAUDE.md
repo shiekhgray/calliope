@@ -10,10 +10,11 @@ docker compose exec api alembic upgrade head
 
 | File | Endpoints |
 |---|---|
-| `auth.py` | POST /auth/login (OAuth2 form), /auth/refresh, GET /auth/me, POST /auth/change-password, PUT /auth/similarity-weights (partial update, 0–10 per field) |
+| `auth.py` | POST /auth/login (OAuth2 form), /auth/refresh, GET /auth/me (incl. radio_mode/radio_variety), POST /auth/change-password, PUT /auth/similarity-weights (partial, 0–10 per field), PUT /auth/radio-settings (partial; radio_mode enum + radio_variety 0–10) |
 | `artists.py` | GET /artists (excludes VA), /artists/{id}/albums (album_type='album' only), /artists/{id}/singles (album_type IN ('single','ep'), includes first_track), /artists/{id}/top-tracks?limit=N (default 25, uses album_artists join), /artists/{id}/compilations, /artists/{id}/genres/fetch (Last.fm artist.getTopTags) |
 | `albums.py` | GET /albums/{id} (includes album_type), /albums/{id}/art, PUT /albums/{id}/art (multipart, writes Folder.jpg), PATCH /albums/{id}/type (owner-only, validates album/ep/single); GET /albums/{id}/genres, GET /albums/{id}/genres/fetch (Last.fm), GET /albums/{id}/genres/suggest (similarity k-NN), POST /albums/{id}/genres (auth, both users), DELETE /albums/{id}/genres/{genre_id} (auth, both users) |
-| `tracks.py` | GET /tracks?sort=play_count&limit=N (auth, default 50), GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar (applies per-user sim_weight_* via DIM_SLICES) |
+| `tracks.py` | GET /tracks?sort=play_count&limit=N (auth, default 50), GET /tracks/{id}/stream (byte-range, 512KB chunks), POST /tracks/{id}/played, GET /tracks/{id}/similar (per-user weighting via shared app/similarity.py) |
+| `radio.py` | POST /radio/next (auth) — mode-agnostic continuation: classic/anchor/ripple/anchored_ripple + top-K Variety sampling. Stateless: client passes mode/anchor_id/last_id/played_ids/radius/source_album_id/variety, gets back one enriched track + updated radius (204 when no candidate). All geometry in the user's weighted z-scored space via app/similarity.py. |
 | `genres.py` | GET /genres (accepts `?q=` for autocomplete filter, limit 20 when q set) |
 | `search.py` | GET /search?q= (unaccent), GET/POST /search/history (auth; upsert + prune to 10) |
 | `playlists.py` | Full CRUD + add/remove/reorder tracks + similar; all endpoints require auth; GET /playlists and GET /playlists/{id} gate by can_view; track mutations gate by can_edit; DELETE is owner-only; GET /playlists returns enriched card data: art_tracks (0–4, centroid-based 2-pass selection), preview_tracks (first 3 titles), top_genres (top 4 by frequency), track_count |
@@ -46,7 +47,7 @@ Script must live at `api/scripts/scan.py` (inside the Docker build context). Mov
 
 ## Migrations
 
-Applied: **0001–0013**. Next number: **0014**.
+Applied: **0001–0014**. Next number: **0015**.
 
 | File | Change |
 |---|---|
@@ -63,6 +64,7 @@ Applied: **0001–0013**. Next number: **0014**.
 | 0011_add_similarity_weights | 9 `sim_weight_*` columns on `users` (INTEGER NOT NULL DEFAULT 5): timbre, timbral_variation, harmony, chord_movement, tempo, loudness, dynamic_range, brightness, tonal |
 | 0012_add_playlist_permissions | `view_mode VARCHAR(10) DEFAULT 'everyone'`, `edit_mode VARCHAR(10) DEFAULT 'owner'` on `playlists`; new tables `playlist_viewers (playlist_id, user_id)`, `playlist_editors (playlist_id, user_id)` with cascade-delete FKs |
 | 0013_add_track_map_coords | `track_map_coords (track_id PK→tracks cascade, x REAL, y REAL, cluster_id INT, updated_at)` — Music Map atlas; positions written by the indexer's UMAP step |
+| 0014_add_radio_settings | `radio_mode VARCHAR(16) NOT NULL DEFAULT 'classic'`, `radio_variety INTEGER NOT NULL DEFAULT 0` on `users` (Radio Modes) |
 
 Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overridden at runtime via `env.py`. Do not add a value there.
 
@@ -77,7 +79,13 @@ Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overr
 
 `GET /tracks/{id}/similar` is brute-force numpy (not pgvector ANN): fetches all vectors, z-score normalizes, applies per-user `sim_weight_*` scaling via `DIM_SLICES` (weights/5.0 multiplier), L2-normalizes, dot-product. Fast enough at ~3k tracks. HNSW index exists for future use.
 
-`DIM_SLICES` in `tracks.py` maps 9 named groups to slice objects covering all 60 dimensions:
+**Shared helper:** `app/similarity.py` owns the canonical `DIM_SLICES` + the
+z-score→weights→L2 pipeline (`load_weighted_matrix`) and track enrichment
+(`enrich_tracks`). Both `/tracks/{id}/similar` and `/radio/next` import from it.
+`albums.py` (genre suggest, no weights) and `map.py` (float64 + KMeans + `w=`
+override) still carry their own specialized copies — keep all in sync if dims change.
+
+`DIM_SLICES` maps 9 named groups to slice objects covering all 60 dimensions:
 - `timbre` (0–12), `timbral_variation` (13–25), `harmony` (26–37), `chord_movement` (38–49)
 - `tempo` (50), `loudness` (51), `dynamic_range` (52), `brightness` (53), `tonal` (54–59)
 
@@ -89,7 +97,7 @@ Genre writes (`POST /albums/{id}/genres`) normalize to lowercase before upsert. 
 
 `GET /albums/{id}/genres/suggest` reuses the same z-score + L2-normalize pipeline as `/tracks/{id}/similar` but lives in `albums.py`, not `tracks.py`. It has its own copy of `DIM_SLICES` (same values).
 
-The Music Map endpoints in `map.py` also carry their own copy of `DIM_SLICES` (same values) and reuse the identical z-score → per-group `w/5.0` scaling → L2-normalize preprocessing. `/map/clusters` and the indexer's offline default clustering share a compact deterministic k-means++ (`_kmeans`, 16 clusters, centroid-sorted ids for stable hues) so neutral-weight colors line up between offline and online. There are now **four** copies of `DIM_SLICES` (tracks, albums, playlists, map) — keep them in sync if dims ever change.
+The Music Map endpoints in `map.py` also carry their own copy of `DIM_SLICES` (same values) and reuse the identical z-score → per-group `w/5.0` scaling → L2-normalize preprocessing. `/map/clusters` and the indexer's offline default clustering share a compact deterministic k-means++ (`_kmeans`, 16 clusters, centroid-sorted ids for stable hues) so neutral-weight colors line up between offline and online. The canonical `DIM_SLICES` now lives in `app/similarity.py` (used by tracks + radio); `albums`, `playlists`, and `map` still keep their own specialized copies — keep them in sync if dims ever change.
 
 ## Search
 

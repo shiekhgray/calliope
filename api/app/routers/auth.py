@@ -75,7 +75,12 @@ def _user_response(user: models.User) -> dict:
         "sim_weight_dynamic_range":     user.sim_weight_dynamic_range,
         "sim_weight_brightness":        user.sim_weight_brightness,
         "sim_weight_tonal":             user.sim_weight_tonal,
+        "radio_mode":                   user.radio_mode,
+        "radio_variety":                user.radio_variety,
     }
+
+
+_RADIO_MODES = {"classic", "anchor", "ripple", "anchored_ripple"}
 
 
 @router.get("/me")
@@ -112,6 +117,33 @@ def update_similarity_weights(
                 detail=f"Value for '{key}' must be an integer between 0 and 10",
             )
         setattr(current_user, f"sim_weight_{key}", value)
+    db.commit()
+    db.refresh(current_user)
+    return _user_response(current_user)
+
+
+@router.put("/radio-settings")
+def update_radio_settings(
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    if "radio_mode" in body:
+        mode = body["radio_mode"]
+        if mode not in _RADIO_MODES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"radio_mode must be one of {sorted(_RADIO_MODES)}",
+            )
+        current_user.radio_mode = mode
+    if "radio_variety" in body:
+        variety = body["radio_variety"]
+        if not isinstance(variety, int) or variety < 0 or variety > 10:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="radio_variety must be an integer between 0 and 10",
+            )
+        current_user.radio_variety = variety
     db.commit()
     db.refresh(current_user)
     return _user_response(current_user)
