@@ -179,6 +179,37 @@ class TrackVector(Base):
     track = relationship("Track")
 
 
+class TrackVectorKI(Base):
+    """Key-invariant similarity space (Vector Tuning experiment).
+
+    Derived from TrackVector: chroma rotated to each track's detected tonic, so
+    matching reflects mode/relative-harmony instead of absolute key. Regenerated
+    by scripts/build_ki_vectors.py. Its z-score stats are VectorNormParams id=2.
+    """
+    __tablename__ = "track_vectors_ki"
+
+    track_id = Column(Integer, ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True)
+    feature_vector = Column(Vector(60), nullable=False)
+    file_mtime = Column(BigInteger, nullable=False)
+
+    track = relationship("Track")
+
+
+class TrackVectorEmbed(Base):
+    """Pretrained PANNs CNN14 audio embedding space (Vector Tuning experiment).
+
+    2048-dim, no weight groups — similarity is plain L2-normalized cosine. Populated
+    by indexer/build_embeddings.py (PANNs inference; indexer-only torch dep).
+    """
+    __tablename__ = "track_vectors_embed"
+
+    track_id = Column(Integer, ForeignKey("tracks.id", ondelete="CASCADE"), primary_key=True)
+    embedding = Column(Vector(2048), nullable=False)
+    file_mtime = Column(BigInteger, nullable=False)
+
+    track = relationship("Track")
+
+
 class VectorNormParams(Base):
     __tablename__ = "vector_norm_params"
 

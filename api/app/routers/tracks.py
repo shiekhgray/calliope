@@ -12,7 +12,7 @@ from app.config import settings
 from app.database import get_db
 from app import models
 from app.auth import get_current_user
-from app.similarity import enrich_tracks, load_weighted_matrix
+from app.similarity import enrich_tracks, load_embedding_matrix, load_weighted_matrix
 
 router = APIRouter(prefix="/tracks", tags=["tracks"])
 
@@ -115,18 +115,20 @@ def mark_played(
 def similar_tracks(
     track_id: int,
     limit: int = Query(default=25, ge=1, le=100),
+    space: str = Query(default="embed"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    tv = db.query(models.TrackVector).filter_by(track_id=track_id).first()
-    if not tv:
-        raise HTTPException(status_code=404, detail="Track not indexed yet")
-
-    ids, matrix = load_weighted_matrix(db, current_user)
+    if space == "embed":
+        ids, matrix = load_embedding_matrix(db)
+    else:
+        ids, matrix = load_weighted_matrix(db, current_user, space=space)
     if ids is None:
         return []
 
     query_mask = ids == track_id
+    if not query_mask.any():
+        raise HTTPException(status_code=404, detail="Track not indexed in this space yet")
     query_vec = matrix[query_mask][0]
     sims = matrix @ query_vec
     sims[query_mask] = -2.0

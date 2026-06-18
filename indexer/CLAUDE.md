@@ -14,7 +14,27 @@ Plain Python stdlib `http.server` — no FastAPI, no external HTTP framework. Th
 
 The API scanner router (`api/app/routers/scanner.py`) calls this after scan.py completes (phase 2 of the two-phase rescan).
 
-## Feature Vector: 60 Dimensions
+## PANNs Audio Embedding — the DEFAULT similarity space (`app/embeddings.py`)
+
+A pretrained **PANNs CNN14** audio embedding (2048-dim) per track → `track_vectors_embed`.
+It captures genre/instrumentation/vocal character holistically and **decisively beat the
+hand-crafted 60-dim DSP vector** in the owner A/B (see `prd/vector-tuning.md`); the API
+now defaults `space=embed` for `/tracks/{id}/similar` and `/radio/next`.
+
+- `build_embeddings(db, update_status)` is called at the end of `run_indexing()`
+  (defensive try/except — a PANNs failure must not break core DSP indexing). Incremental:
+  embeds only tracks whose `track_vectors_embed` row is missing or has a stale `file_mtime`.
+- **CPU-only**, ~2.5s/track on the i7-10700K (decode 32kHz mono + one CNN14 forward pass).
+  No GPU. Full library ~2.7h; incremental on rescan is cheap.
+- torch (CPU wheel) + `panns-inference` + `torchlibrosa` are baked in the Dockerfile
+  (`--no-deps` on panns so it can't pull CUDA torch / matplotlib — matplotlib is stubbed
+  in `embeddings.py` since panns imports pyplot only for unused plotting). The CNN14
+  checkpoint + label csv are pre-fetched to `/root/panns_data` at image build.
+- Manual full/incremental rebuild: `docker compose exec indexer python -m app.embeddings`.
+- Similarity for this space is plain L2-normalized cosine — **no z-score, no weights**
+  (done in the API's `load_embedding_matrix`, not here).
+
+## Feature Vector: 60 Dimensions (DSP space — now dev-only fallback)
 
 | Dims | Feature | Librosa call |
 |---|---|---|

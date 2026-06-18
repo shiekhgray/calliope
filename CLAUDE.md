@@ -97,6 +97,13 @@ search_history     id, user_id, entity_type ('artist'|'album'|'track'), entity_i
                    UNIQUE(user_id, entity_type, entity_id)
 track_vectors      track_id (FK unique), feature_vector vector(60), file_mtime bigint
                    (expanded 38→60 dims in migration 0010; HNSW index on feature_vector)
+track_vectors_ki   track_id (FK unique), feature_vector vector(60), file_mtime bigint
+                   (migration 0015; key-invariant chroma A/B space — derived from
+                   track_vectors by scripts/build_ki_vectors.py; norm stats = vector_norm_params id=2)
+track_vectors_embed track_id (FK unique), embedding vector(2048), file_mtime bigint
+                   (migration 0016; pretrained PANNs CNN14 audio embedding — the DEFAULT
+                   similarity space; L2-cosine, no weights; written by indexer app/embeddings.py.
+                   standard/ki DSP spaces are dev-only via ?space=)
 vector_norm_params id (always 1), means float[60], stds float[60], updated_at
 track_map_coords   track_id (FK→tracks, cascade), x REAL, y REAL, cluster_id int, updated_at
                    (migration 0013; Music Map 2-D atlas — positions from indexer UMAP step)

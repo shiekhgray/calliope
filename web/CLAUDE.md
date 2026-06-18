@@ -20,7 +20,9 @@ web/src/
     PlayerBar.jsx            ← fixed bottom bar; art thumbnail → /now-playing; ≋ radio toggle
     AddToPlaylistMenu.jsx    ← "+" popover on every track row
     ChangePasswordModal.jsx
-    SimilarityWeightsModal.jsx  ← 3 groups × 3 sliders; PUT /auth/similarity-weights; opened from user menu "Sound Matching"
+    (SimilarityWeightsModal.jsx removed — "Sound Matching" retired from the user menu when the
+     PANNs embedding became the default similarity space. The 9 sim_weight_* sliders now live ONLY
+     in MapPage's "Tune weights" panel, which still drives the DSP-based Music Map.)
     RadioModesModal.jsx         ← radio-group of 4 continuation modes + Variety slider; PUT /auth/radio-settings; opened from user menu "Radio Modes"
     PlaylistMosaicBanner.jsx    ← full-width 174px hero above PlaylistPage content; bin-packs album art left→right with squared-exponential density; col-first scan; top-25% albums get 2×2 slots
     ReleaseCardGenres.jsx       ← "Genres" toggle button + chip display for discovery cards; used in both ReleasesPage and ArtistPage (Missing Releases section)

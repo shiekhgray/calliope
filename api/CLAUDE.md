@@ -47,7 +47,7 @@ Script must live at `api/scripts/scan.py` (inside the Docker build context). Mov
 
 ## Migrations
 
-Applied: **0001–0014**. Next number: **0015**.
+Applied: **0001–0015**. Next number: **0016**.
 
 | File | Change |
 |---|---|
@@ -65,6 +65,7 @@ Applied: **0001–0014**. Next number: **0015**.
 | 0012_add_playlist_permissions | `view_mode VARCHAR(10) DEFAULT 'everyone'`, `edit_mode VARCHAR(10) DEFAULT 'owner'` on `playlists`; new tables `playlist_viewers (playlist_id, user_id)`, `playlist_editors (playlist_id, user_id)` with cascade-delete FKs |
 | 0013_add_track_map_coords | `track_map_coords (track_id PK→tracks cascade, x REAL, y REAL, cluster_id INT, updated_at)` — Music Map atlas; positions written by the indexer's UMAP step |
 | 0014_add_radio_settings | `radio_mode VARCHAR(16) NOT NULL DEFAULT 'classic'`, `radio_variety INTEGER NOT NULL DEFAULT 0` on `users` (Radio Modes) |
+| 0015_add_track_vectors_ki | `track_vectors_ki` (mirror of `track_vectors`, `vector(60)` + HNSW) — key-invariant similarity space (Vector Tuning experiment). Empty table only; populated by `scripts/build_ki_vectors.py`. KI z-score stats = `vector_norm_params` row id=2. |
 
 Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overridden at runtime via `env.py`. Do not add a value there.
 
@@ -82,6 +83,28 @@ Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overr
 **Shared helper:** `app/similarity.py` owns the canonical `DIM_SLICES` + the
 z-score→weights→L2 pipeline (`load_weighted_matrix`) and track enrichment
 (`enrich_tracks`). Both `/tracks/{id}/similar` and `/radio/next` import from it.
+
+**Similarity spaces (`space` param):** three spaces, selected per request.
+- **`embed` (DEFAULT)** — pretrained PANNs CNN14 audio embedding (`track_vectors_embed`,
+  2048-dim). `load_embedding_matrix()` — plain L2-normalized cosine, **no z-score, no
+  per-user weights** (a learned embedding has no weight-groups). Won the Vector Tuning
+  owner A/B decisively (captures genre/instrumentation/vocals; see prd/vector-tuning.md).
+  Default for both `GET /tracks/{id}/similar` and `/radio/next`.
+- **`standard`** / **`ki`** — the 60-dim DSP spaces via `load_weighted_matrix(..., space=)`
+  / `SPACES` map (`track_vectors` norm id=1 / `track_vectors_ki` norm id=2). Now
+  **dev-only**, reachable via `?space=standard|ki`. The 9 `sim_weight_*` sliders (which
+  only affect these) were retired from the web user menu; the columns + `PUT
+  /auth/similarity-weights` remain (still used by the DSP-based Music Map tuning panel).
+
+Embeddings are produced by the indexer (`app/embeddings.py`, PANNs), populated
+incrementally at the end of each index run; full manual rebuild:
+`docker compose exec indexer python -m app.embeddings`. The KI table is a regenerable
+numpy derivative of `track_vectors` (chroma rotated to the Krumhansl-Schmuckler tonic):
+`docker compose exec api python scripts/build_ki_vectors.py`.
+
+**Radio note:** `/radio/next` geometry (cohesion caps, soft-radius step 0.5) was tuned
+for the DSP cosine spread; embed cosines sit in a compressed ~0.88–0.99 band, so the
+ripple/anchored modes need retuning for embed — classic/nearest works fine. Follow-up.
 `albums.py` (genre suggest, no weights) and `map.py` (float64 + KMeans + `w=`
 override) still carry their own specialized copies — keep all in sync if dims change.
 

@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.auth import get_current_user
 from app.database import get_db
-from app.similarity import enrich_tracks, load_weighted_matrix
+from app.similarity import enrich_tracks, load_embedding_matrix, load_weighted_matrix
 
 router = APIRouter(prefix="/radio", tags=["radio"])
 
@@ -77,8 +77,12 @@ def radio_next(
     radius = body.get("radius")
     source_album_id = body.get("source_album_id")
     variety = max(0, min(10, int(body.get("variety") or 0)))
+    space = body.get("space", "embed")
 
-    ids, matrix = load_weighted_matrix(db, current_user)
+    if space == "embed":
+        ids, matrix = load_embedding_matrix(db)
+    else:
+        ids, matrix = load_weighted_matrix(db, current_user, space=space)
     if ids is None:
         return Response(status_code=204)
 

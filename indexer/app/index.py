@@ -104,6 +104,15 @@ def run_indexing(update_status):
         _recompute_norm_params(db)
         db.commit()
 
+        # PANNs audio embeddings — the default similarity space. Incremental: only
+        # embeds new/changed tracks. Defensive: a failure here must not break the
+        # core DSP indexing above.
+        try:
+            from .embeddings import build_embeddings
+            build_embeddings(db, update_status)
+        except Exception as e:
+            print(f"Indexer: embedding build failed: {e}", file=sys.stderr, flush=True)
+
         # Keep the Music Map atlas current: place any new tracks into the frozen
         # UMAP embedding (cheap) and refresh default clusters.
         try:
