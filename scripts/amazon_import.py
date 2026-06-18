@@ -5,7 +5,8 @@ amazon_import.py — Import Amazon Music zip files or loose singles into the Cal
 Amazon zip format:
   Artist/Album/01 - Track Title.mp3
   Artist/Album/02 - Track Title.mp3
-  (no cover art included)
+  (no cover file on disk — art is embedded in the ID3 tags; extracted to
+   Folder.jpg automatically when the album has no cover image)
 
 Amazon single format (loose .mp3/.m4a):
   01 - Track Title.mp3   (ID3 tags carry artist/album metadata)
@@ -30,6 +31,37 @@ from typing import Optional
 MUSIC_ROOT = Path("/var/www/html/calliope/music")
 
 AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav", ".flac", ".ogg", ".opus"}
+
+
+def extract_embedded_cover(data: bytes) -> Optional[bytes]:
+    """Return embedded cover-art image bytes (ID3 APIC / MP4 'covr') from audio
+    file bytes, or None. Amazon embeds art in the tags rather than shipping a
+    Folder.jpg, so this is the only cover source for an Amazon release."""
+    try:
+        import io
+        from mutagen import File as MutagenFile
+    except ImportError:
+        return None
+    try:
+        f = MutagenFile(io.BytesIO(data))
+        if f is None or getattr(f, "tags", None) is None:
+            return None
+        tags = f.tags
+        if hasattr(tags, "getall"):            # ID3 (MP3)
+            for apic in tags.getall("APIC"):
+                return apic.data
+        covr = tags.get("covr")                # MP4 (M4A)
+        if covr:
+            return bytes(covr[0])
+    except Exception:
+        return None
+    return None
+
+
+def has_cover_file(album_dir: Path) -> bool:
+    """True if the album dir already holds a .jpg (matches the scanner's cover
+    selection), so embedded art never clobbers a manually-added cover."""
+    return album_dir.is_dir() and any(p.suffix.lower() == ".jpg" for p in album_dir.iterdir())
 
 
 def primary_artist(albumartist: str) -> str:
@@ -73,18 +105,25 @@ def import_loose(audio_path: Path, music_root: Path, cover_path: Optional[Path] 
     print(f"  → title         : {title!r}")
     print(f"  → destination   : {dest_file}")
 
+    audio_bytes = audio_path.read_bytes()
+
     if cover_path:
-        dest_cover = dest_dir / "Folder.jpg"
-        print(f"  → cover art     : {cover_path.name} → {dest_cover}")
+        print(f"  → cover art     : {cover_path.name} → {dest_dir / 'Folder.jpg'}")
+    elif not has_cover_file(dest_dir) and extract_embedded_cover(audio_bytes):
+        print(f"  → cover art     : embedded ID3 art → {dest_dir / 'Folder.jpg'}")
 
     if not dry_run:
         dest_dir.mkdir(parents=True, exist_ok=True)
-        dest_file.write_bytes(audio_path.read_bytes())
+        dest_file.write_bytes(audio_bytes)
         print(f"  + {audio_path.name}")
         if cover_path:
-            dest_cover = dest_dir / "Folder.jpg"
-            dest_cover.write_bytes(cover_path.read_bytes())
+            (dest_dir / "Folder.jpg").write_bytes(cover_path.read_bytes())
             print(f"  + Folder.jpg")
+        elif not has_cover_file(dest_dir):
+            cover = extract_embedded_cover(audio_bytes)
+            if cover:
+                (dest_dir / "Folder.jpg").write_bytes(cover)
+                print(f"  + Folder.jpg (from embedded art)")
 
     return True
 
@@ -126,6 +165,18 @@ def import_zip(zip_path: Path, music_root: Path, dry_run: bool = False) -> bool:
                     data = zf.read(name)
                     dest_file.write_bytes(data)
                     print(f"  + {Path(name).name}")
+
+                # Amazon ships no cover file — extract embedded ID3 art to
+                # Folder.jpg for any album that still lacks a cover image.
+                for album in sorted(albums):
+                    dest_dir = music_root / album
+                    if has_cover_file(dest_dir):
+                        continue
+                    first = next(n for n in audio_entries if Path(n).parts[:2] == tuple(album.split("/", 1)))
+                    cover = extract_embedded_cover(zf.read(first))
+                    if cover:
+                        (dest_dir / "Folder.jpg").write_bytes(cover)
+                        print(f"  + {album}/Folder.jpg (from embedded art)")
             else:
                 for name in audio_entries:
                     dest_file = music_root / Path(name)

@@ -18,6 +18,7 @@
 - [x] Qobuz zip import support — `scripts/qobuz_import.py` + web import pipeline; ffmpeg in api image
 - [x] Loose FLAC single import — `qobuz_import.py --loose <track.flac>` (tag-based placement + FLAC→MP3 transcode); web /import/upload + ImportPage accept .flac; all loose singles drop a `.album_type=single` marker that the scanner reads on album creation only (never clobbers manual type changes)
 - [x] Search Screen (Android) — Phase 5 substep; debounced query, recent chips, three-section results
+- [x] Embedded album art on import — Amazon ships art in ID3 (APIC, ~600×600 JPEG), no cover file on disk. Both importers (`scripts/amazon_import.py` CLI + `api/app/routers/import_music.py` web) now extract embedded art → `Folder.jpg` when an album has no `.jpg` yet (never clobbers a manual higher-res cover). Covers zip + loose-single paths. Web router change needs `docker compose build api && docker compose up -d api` to go live; CLI works on host immediately. Verified end-to-end (zip + loose, idempotent re-run). Scanner unchanged — picks up Folder.jpg as before; PANNs encoder already runs on the upload-triggered scan (incremental). NOT backfilled for existing cover-less albums (scope = new imports only).
 
 ## In Progress
 - [ ] [Phase 5: Android App](prd/phase5-android.md)

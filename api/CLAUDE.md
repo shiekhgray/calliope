@@ -72,7 +72,7 @@ Alembic note: `sqlalchemy.url` in `alembic.ini` is intentionally blank — overr
 ## Import Format Detection (`import_music.py`)
 
 - **Bandcamp**: flat zip + `Artist - Album.zip` filename. Strips `Artist - Album - ` prefix from track names. `cover.jpg` → `Folder.jpg`.
-- **Amazon**: two-level subdirectory structure (`Artist/Album/track.mp3`). Decodes `__` → `/` in directory and file names. Copies any image file found at the album level.
+- **Amazon**: two-level subdirectory structure (`Artist/Album/track.mp3`). Decodes `__` → `/` in directory and file names. Copies any image file found at the album level; if none, extracts the embedded ID3 cover art (APIC, ~600×600 JPEG) from the first track to `Folder.jpg` — only when the album has no `.jpg` yet, so a manual cover is never clobbered. Same fallback applies to loose Amazon singles. Mirrored in the host-side `scripts/amazon_import.py`.
 - **Qobuz**: one-level subdirectory `Artist - Album/NN Title.flac`. FLACs transcoded to MP3 V0 (~245kbps) via ffmpeg subprocess. No cover art in Qobuz zips. ffmpeg is installed in the API Docker image. Loose singles (bare `.flac`) via host-side `scripts/qobuz_import.py --loose` — tag-based placement, transcode, and drops a `.album_type=single` marker (see scanner notes).
 - If no pattern matches, returns an error describing all three expected formats.
 

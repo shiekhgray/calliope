@@ -68,9 +68,41 @@ def _process_audio_single(filename: str, data: bytes, music_root: Path) -> dict:
             return {"filename": filename, "status": "error", "message": f"ffmpeg transcoding failed: {e}"}
     else:
         (dest_dir / base_name).write_bytes(data)
+        # Amazon singles carry art embedded in ID3 — drop it as Folder.jpg
+        # when the album has no cover yet.
+        if not _has_cover_file(dest_dir):
+            cover = _extract_embedded_cover(data)
+            if cover:
+                (dest_dir / "Folder.jpg").write_bytes(cover)
 
     _write_single_marker(dest_dir)
     return {"filename": filename, "status": "ok", "artist": artist, "album": album, "tracks_imported": 1}
+
+
+def _extract_embedded_cover(data: bytes):
+    """Return embedded cover-art image bytes (ID3 APIC / MP4 'covr') from audio
+    file bytes, or None. Amazon embeds art in the tags rather than shipping a
+    cover file, so this is the only cover source for an Amazon release."""
+    try:
+        f = MutagenFile(io.BytesIO(data))
+        if f is None or getattr(f, "tags", None) is None:
+            return None
+        tags = f.tags
+        if hasattr(tags, "getall"):            # ID3 (MP3)
+            for apic in tags.getall("APIC"):
+                return apic.data
+        covr = tags.get("covr")                # MP4 (M4A)
+        if covr:
+            return bytes(covr[0])
+    except Exception:
+        return None
+    return None
+
+
+def _has_cover_file(album_dir: Path) -> bool:
+    """True if the album dir already holds a .jpg (matches the scanner's cover
+    selection), so embedded art never clobbers a manually-added cover."""
+    return album_dir.is_dir() and any(p.suffix.lower() == ".jpg" for p in album_dir.iterdir())
 
 
 def _decode_amazon(name: str) -> str:
@@ -196,6 +228,12 @@ def _extract_amazon(filename: str, zf: zipfile.ZipFile, audio_names: list, music
         if name.startswith(prefix) and p.suffix.lower() in IMAGE_EXTENSIONS and len(p.parts) == 3:
             dest_name = "Folder.jpg" if p.name.lower() in ("folder.jpg", "cover.jpg") else _decode_amazon(p.name)
             (dest_dir / dest_name).write_bytes(zf.read(name))
+
+    # No cover file in the zip — fall back to art embedded in the first track.
+    if not _has_cover_file(dest_dir):
+        cover = _extract_embedded_cover(zf.read(audio_names[0]))
+        if cover:
+            (dest_dir / "Folder.jpg").write_bytes(cover)
 
     return {"filename": filename, "status": "ok", "artist": artist, "album": album, "tracks_imported": count}
 
