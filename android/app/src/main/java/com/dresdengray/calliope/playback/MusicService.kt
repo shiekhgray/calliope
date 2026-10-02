@@ -10,7 +10,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.CommandButton
@@ -23,7 +23,6 @@ import com.dresdengray.calliope.MainActivity
 import com.dresdengray.calliope.R
 import com.dresdengray.calliope.data.api.CalliopeApi
 import com.dresdengray.calliope.data.api.model.Track
-import com.dresdengray.calliope.data.auth.TokenStorage
 import com.dresdengray.calliope.util.Constants
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
@@ -36,12 +35,13 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class MusicService : MediaLibraryService() {
 
-    @Inject lateinit var tokenStorage: TokenStorage
+    @Inject lateinit var okHttpClient: OkHttpClient
     @Inject lateinit var api: CalliopeApi
     @Inject lateinit var radioExtender: RadioQueueExtender
 
@@ -380,15 +380,13 @@ class MusicService : MediaLibraryService() {
     override fun onCreate() {
         super.onCreate()
 
-        // Build a DataSource.Factory that reads the access token fresh for each stream request.
+        // Stream through the app's authenticated OkHttpClient so every request picks up the
+        // current access token (AuthInterceptor) and gets a refresh-and-retry on 401
+        // (TokenAuthenticator). The previous DefaultHttpDataSource baked one token into an
+        // immutable header map here in onCreate(), which went stale after 15 minutes and had no
+        // way to recover. Timeouts come from the client (15s connect / 30s read).
         // DefaultDataSource wraps the HTTP factory so file:// URIs (downloaded tracks) also work.
-        val httpDataSourceFactory = DefaultHttpDataSource.Factory().apply {
-            setDefaultRequestProperties(
-                mapOf("Authorization" to "Bearer ${tokenStorage.accessToken.orEmpty()}")
-            )
-            setConnectTimeoutMs(15_000)
-            setReadTimeoutMs(15_000)
-        }
+        val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
         val dataSourceFactory = DefaultDataSource.Factory(this, httpDataSourceFactory)
 
         player = ExoPlayer.Builder(this)

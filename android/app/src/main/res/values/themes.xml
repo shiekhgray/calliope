@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
+    <!-- Light window background. The dark counterpart lives in values-night/themes.xml:
+         the platform has no android:Theme.Material.DayNight, and
+         android:Theme.DeviceDefault.DayNight needs API 29 (minSdk is 26). -->
     <style name="Theme.Calliope" parent="android:Theme.Material.Light.NoActionBar" />
 </resources>
