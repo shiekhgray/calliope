@@ -45,6 +45,8 @@ individually citable.
 ---
 
 ## Bug 3: Login screen renders white-on-white — title, typed text, Sign In button and errors all invisible
+**Fixed:** 0f092d1 — not yet verified on device.
+
 
 **Steps to reproduce:**
 1. Put the phone in **dark** theme (system setting)
@@ -108,6 +110,8 @@ become usable.
 ---
 
 ## Bug 4: Playback stops ~15 minutes after the service starts — stream token is frozen at `onCreate`
+**Fixed:** 0f092d1 — not yet verified on device.
+
 
 **Steps to reproduce:**
 1. Start playing a track (this starts `MusicService`)
@@ -147,6 +151,8 @@ header per-open also fixes the staleness but still has no retry.)
 ---
 
 ## Bug 5: Session death is silent — the UI never reacts, and sign-out can be undone by an in-flight refresh
+**Fixed:** 0f092d1 — not yet verified on device.
+
 
 **Steps to reproduce:**
 1. Use the app until the session can no longer be refreshed (expired/invalid
@@ -199,6 +205,8 @@ logout, leaving `isLoggedIn == true` with no real session behind it.
 ---
 
 ## Bug 6: SUSPECTED — OkHttp dispatcher deadlock on a cold start with an expired access token
+**Fixed:** 0f092d1 — not yet verified on device.
+
 
 > **Status: theory, not confirmed.** Consistent with all observed symptoms and
 > with the code as written, but not yet reproduced. The Bug 5 fix eliminates it
@@ -286,6 +294,8 @@ the Bug 5 fixes.
 ---
 
 ## Bug 7: MINOR — `allowBackup` backs up encrypted tokens without their key
+**Fixed:** 0f092d1 — not yet verified on device.
+
 
 **Steps to reproduce:**
 1. Back up the device and restore to a new device (or trigger a device transfer)
@@ -311,6 +321,8 @@ rules files.
 ---
 
 ## Bug 8: A failed login invoked the token authenticator and could clear your session
+**Fixed:** 0f092d1 — not yet verified on device.
+
 
 **Steps to reproduce:**
 1. Sign out
