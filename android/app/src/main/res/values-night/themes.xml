@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Dark window background, so the raw window never shows white under the
+         dark content colors CalliopeTheme hands out in night mode. -->
+    <style name="Theme.Calliope" parent="android:Theme.Material.NoActionBar" />
+</resources>
