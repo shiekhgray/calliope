@@ -21,8 +21,9 @@ web/src/
     AddToPlaylistMenu.jsx    ← "+" popover on every track row
     ChangePasswordModal.jsx
     (SimilarityWeightsModal.jsx removed — "Sound Matching" retired from the user menu when the
-     PANNs embedding became the default similarity space. The 9 sim_weight_* sliders now live ONLY
-     in MapPage's "Tune weights" panel, which still drives the DSP-based Music Map.)
+     PANNs embedding became the default similarity space. The MapPage "Tune weights" panel — the
+     last surface for the 9 sim_weight_* sliders — was also removed in the Map Embedding Rebase
+     (the map now projects the embedding). No UI reads/writes sim_weight_* anymore.)
     RadioModesModal.jsx         ← radio-group of 4 continuation modes + Variety slider; PUT /auth/radio-settings; opened from user menu "Radio Modes"
     PlaylistMosaicBanner.jsx    ← full-width 174px hero above PlaylistPage content; bin-packs album art left→right with squared-exponential density; col-first scan; top-25% albums get 2×2 slots
     ReleaseCardGenres.jsx       ← "Genres" toggle button + chip display for discovery cards; used in both ReleasesPage and ArtistPage (Missing Releases section)
@@ -37,7 +38,7 @@ web/src/
     NowPlayingPage           ← /now-playing; large art, scrubber, queue context, similar tracks
     CompilationsPage         ← /compilations; VA album grid
     ImportPage               ← /import; drag-and-drop zip; Bandcamp + Amazon + Qobuz zips; loose MP3/M4A/FLAC singles (FLAC transcoded server-side); progress bar
-    MapPage                  ← /map; Music Map. Canvas 2-D scatter (no regl/webgl dep — chosen to avoid a container rebuild; smooth at ~3k pts). Pan (drag) / zoom (wheel) / hover tooltip w/ lazy album art / click-to-play. Lens selector: Clusters (stored cluster_id, or live recolor) / Single feature (viridis ramp via /map/lens) / 3-PC gestalt (/map/pca rgb). "Tune weights" panel embeds the Sound Matching sliders → debounced GET /map/clusters?weighted&w= live recolor; Save → PUT /auth/similarity-weights. Now-playing track + /similar neighbors highlighted (ring + dim others).
+    MapPage                  ← /map; Music Map (rebased onto the PANNs embedding). Canvas 2-D scatter (no regl/webgl dep — chosen to avoid a container rebuild; smooth at ~3k pts). Pan (drag) / zoom (wheel) / hover tooltip w/ lazy album art / click-to-play. Lens selector: Clusters (stored cluster_id) / 3-PC gestalt (/map/pca rgb). Now-playing track + /similar neighbors highlighted (ring + dim others). The DSP "Tune weights" panel (sliders → /map/clusters recolor → PUT /auth/similarity-weights) and the single-feature lens (/map/lens) were removed in the embedding rebase.
 ```
 
 ## Key Conventions
@@ -124,7 +125,6 @@ URL format: `{origin}/calliope/albums/{id}?play={trackId}&note={artist}_{album}`
 | `['me']` | Current user profile + similarity weights — staleTime: Infinity; invalidated on weight save |
 | `['album-genres', albumId]` | Committed genres for an album — invalidated on POST/DELETE genre |
 | `['map']` | All Music Map atlas points (GET /map) — staleTime 5min |
-| `['map-lens', feature]` | Single-feature gradient values (GET /map/lens) — enabled only on the feature lens |
 | `['map-pca']` | 3-PC gestalt rgb values (GET /map/pca) — enabled only on the gestalt lens |
 | `['map-similar', trackId]` | Now-playing radio neighborhood for the map highlight (GET /tracks/{id}/similar) |
 | `['users']` | All users `[{id, username}]` — used in PlaylistPage for permissions panel user picker and owner name display |

@@ -1,43 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 import { usePlayer } from '../player/PlayerContext'
-
-// 9 similarity-weight groups, in DIM_SLICES order (must match the API).
-const WEIGHT_KEYS = [
-  'timbre', 'timbral_variation', 'harmony', 'chord_movement', 'tempo',
-  'loudness', 'dynamic_range', 'brightness', 'tonal',
-]
-
-const WEIGHT_GROUPS = [
-  { label: 'Timbre', rows: [
-    { key: 'timbre', label: 'Tone Color' },
-    { key: 'timbral_variation', label: 'Timbral Variation' },
-    { key: 'brightness', label: 'Brightness' },
-  ] },
-  { label: 'Harmony', rows: [
-    { key: 'harmony', label: 'Harmonic Content' },
-    { key: 'chord_movement', label: 'Chord Movement' },
-    { key: 'tonal', label: 'Tonal Character' },
-  ] },
-  { label: 'Rhythm & Energy', rows: [
-    { key: 'tempo', label: 'Tempo' },
-    { key: 'loudness', label: 'Loudness' },
-    { key: 'dynamic_range', label: 'Dynamic Range' },
-  ] },
-]
-
-const FEATURES = [
-  { key: 'timbre', label: 'Tone Color' },
-  { key: 'timbral_variation', label: 'Timbral Variation' },
-  { key: 'harmony', label: 'Harmonic Content' },
-  { key: 'chord_movement', label: 'Chord Movement' },
-  { key: 'tempo', label: 'Tempo' },
-  { key: 'loudness', label: 'Loudness' },
-  { key: 'dynamic_range', label: 'Dynamic Range' },
-  { key: 'brightness', label: 'Brightness' },
-  { key: 'tonal', label: 'Tonal Character' },
-]
 
 // 16 evenly-spaced, well-separated categorical hues for clusters.
 const CLUSTER_PALETTE = Array.from({ length: 16 }, (_, i) => {
@@ -55,21 +19,7 @@ function hslToRgb(h, s, l) {
   return [f(0), f(8), f(4)]
 }
 
-// Viridis-ish perceptual ramp for the single-feature gradient lens.
-const VIRIDIS = [
-  [68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37],
-]
-function viridis(t) {
-  t = Math.max(0, Math.min(1, t))
-  const seg = t * (VIRIDIS.length - 1)
-  const i = Math.min(VIRIDIS.length - 2, Math.floor(seg))
-  const f = seg - i
-  const a = VIRIDIS[i], b = VIRIDIS[i + 1]
-  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]
-}
-
 export default function MapPage() {
-  const qc = useQueryClient()
   const { currentTrack, playTrack } = usePlayer()
   const canvasRef = useRef(null)
   const wrapRef = useRef(null)
@@ -80,35 +30,11 @@ export default function MapPage() {
   const [hover, setHover] = useState(null) // { point, sx, sy }
 
   const [lens, setLens] = useState('cluster')
-  const [feature, setFeature] = useState('tempo')
-  const [showPanel, setShowPanel] = useState(false)
-  const [weights, setWeights] = useState(null)
-  const [weightClusters, setWeightClusters] = useState(null) // {track_id: cid} live recolor
 
   // ---- data ----
   const { data: points = [], isLoading } = useQuery({
     queryKey: ['map'],
     queryFn: () => api.get('/map').then((r) => r.data),
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const { data: me } = useQuery({
-    queryKey: ['me'],
-    queryFn: () => api.get('/auth/me').then((r) => r.data),
-    staleTime: Infinity,
-  })
-
-  useEffect(() => {
-    if (me && !weights) {
-      setWeights(Object.fromEntries(WEIGHT_KEYS.map((k) => [k, me[`sim_weight_${k}`]])))
-    }
-  }, [me]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Single-feature lens values.
-  const { data: lensVals } = useQuery({
-    queryKey: ['map-lens', feature],
-    queryFn: () => api.get('/map/lens', { params: { feature } }).then((r) => r.data),
-    enabled: lens === 'feature',
     staleTime: 5 * 60 * 1000,
   })
 
@@ -129,41 +55,17 @@ export default function MapPage() {
   })
   const similarIds = useMemo(() => new Set(similar.map((t) => t.id)), [similar])
 
-  // ---- live recolor on slider drag (debounced) ----
-  useEffect(() => {
-    if (lens !== 'cluster' || !weights || !showPanel) return
-    const w = WEIGHT_KEYS.map((k) => weights[k]).join(',')
-    const t = setTimeout(() => {
-      api.get('/map/clusters', { params: { weighted: true, w } })
-        .then((r) => setWeightClusters(r.data))
-    }, 250)
-    return () => clearTimeout(t)
-  }, [weights, lens, showPanel])
-
-  const saveMutation = useMutation({
-    mutationFn: (w) => api.put('/auth/similarity-weights', w),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['me'] })
-      if (currentTrack) qc.invalidateQueries({ queryKey: ['similar', currentTrack.id] })
-      qc.invalidateQueries({ queryKey: ['map-similar', currentTrack?.id] })
-    },
-  })
-
   // ---- color resolution ----
   const colorFor = useMemo(() => {
     return (p) => {
-      if (lens === 'feature') {
-        const v = lensVals?.[p.track_id]
-        return v == null ? [90, 90, 100] : viridis(v)
-      }
       if (lens === 'pca') {
         const c = pcaVals?.[p.track_id]
         return c ? [c[0] * 255, c[1] * 255, c[2] * 255] : [90, 90, 100]
       }
-      const cid = weightClusters ? weightClusters[p.track_id] : p.cluster_id
+      const cid = p.cluster_id
       return CLUSTER_PALETTE[((cid ?? 0) % CLUSTER_PALETTE.length + CLUSTER_PALETTE.length) % CLUSTER_PALETTE.length]
     }
-  }, [lens, lensVals, pcaVals, weightClusters])
+  }, [lens, pcaVals])
 
   // ---- bounds + fit ----
   const bounds = useMemo(() => {
@@ -340,10 +242,6 @@ export default function MapPage() {
     return () => ro.disconnect()
   })
 
-  function setWeight(key, value) {
-    setWeights((prev) => ({ ...prev, [key]: value }))
-  }
-
   return (
     <div className="map-page">
       <div className="map-toolbar">
@@ -351,26 +249,12 @@ export default function MapPage() {
         <div className="map-controls">
           <label>
             Color
-            <select value={lens} onChange={(e) => { setLens(e.target.value); setWeightClusters(null) }}>
+            <select value={lens} onChange={(e) => setLens(e.target.value)}>
               <option value="cluster">Clusters</option>
-              <option value="feature">Single feature</option>
               <option value="pca">3-PC gestalt</option>
             </select>
           </label>
-          {lens === 'feature' && (
-            <label>
-              Feature
-              <select value={feature} onChange={(e) => setFeature(e.target.value)}>
-                {FEATURES.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}
-              </select>
-            </label>
-          )}
           <button onClick={() => fit()}>Reset view</button>
-          {lens === 'cluster' && (
-            <button onClick={() => setShowPanel((v) => !v)}>
-              {showPanel ? 'Hide tuning' : 'Tune weights'}
-            </button>
-          )}
         </div>
       </div>
 
@@ -407,41 +291,6 @@ export default function MapPage() {
             </div>
           )}
         </div>
-
-        {showPanel && lens === 'cluster' && weights && (
-          <aside className="map-tune-panel">
-            <h3>Sound Matching</h3>
-            <p className="map-tune-hint">Drag to recolor clusters live. Save to make it your default.</p>
-            {WEIGHT_GROUPS.map((group) => (
-              <div key={group.label} className="sim-weights-group">
-                <div className="sim-weights-group-label">{group.label}</div>
-                {group.rows.map(({ key, label }) => (
-                  <div key={key} className="sim-weight-row">
-                    <div className="sim-weight-label">{label}</div>
-                    <input
-                      type="range" min={0} max={10} step={1}
-                      value={weights[key]}
-                      onChange={(e) => setWeight(key, Number(e.target.value))}
-                      className="sim-weight-slider"
-                    />
-                    <div className="sim-weight-value">{weights[key]}</div>
-                  </div>
-                ))}
-              </div>
-            ))}
-            <div className="map-tune-actions">
-              <button
-                onClick={() => { setWeights(Object.fromEntries(WEIGHT_KEYS.map((k) => [k, 5]))) }}
-                type="button"
-              >Reset to neutral</button>
-              <button
-                className="btn-primary"
-                disabled={saveMutation.isPending}
-                onClick={() => saveMutation.mutate(weights)}
-              >{saveMutation.isPending ? 'Saving…' : 'Save'}</button>
-            </div>
-          </aside>
-        )}
       </div>
     </div>
   )

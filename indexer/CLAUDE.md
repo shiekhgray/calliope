@@ -74,13 +74,13 @@ Vectors are stored **raw** (unnormalized). Normalization is applied at query tim
 
 ## Music Map Atlas (`mapping.py`)
 
-`build_map(db, full_refit)` projects the 60-dim vectors to fixed 2-D coordinates and stores them in `track_map_coords` (migration 0013). Called automatically at the end of `run_indexing()` with `full_refit=False`; the manual `POST /map/rebuild` runs it with `full_refit=True`.
+`build_map(db, full_refit)` projects the **2048-dim PANNs embedding** (`track_vectors_embed`, the default similarity space) to fixed 2-D coordinates and stores them in `track_map_coords` (migration 0013). Called automatically at the end of `run_indexing()` with `full_refit=False` (after `build_embeddings`, so the embed rows exist); the manual `POST /map/rebuild` runs it with `full_refit=True`. Rebased from the 60-dim DSP vector in the Map Embedding Rebase (Tier 1, 2026-06-18) so the atlas reflects the space that actually drives similarity.
 
-- Preprocessing mirrors the similarity engine: z-score via `vector_norm_params` (neutral weights) → L2-normalize → UMAP `metric="euclidean"` (L2-norm makes euclidean ≈ the cosine the engine uses).
-- **Full refit:** `UMAP(n_neighbors=15, min_dist=0.1, n_components=2).fit_transform(...)`, pickle the model to `MAP_MODEL_PATH` (default `/data/umap_model.pkl`, backed by the `indexer_data` docker volume).
-- **Incremental:** `reducer.transform()` only tracks missing from `track_map_coords` — frozen geography, cheap. Existing points keep their coords; only `cluster_id` is refreshed.
-- Default `cluster_id`: compact deterministic k-means++ (`kmeans()`, 16 clusters) on the full 60-D z-scored+L2 space. Mirrored by the API's `_kmeans` in `map.py` so neutral-weight colors line up (note: k-means label identity is sensitive to track-count drift between a full refit and a later live recompute — call-to-call determinism for a fixed input is what's guaranteed).
-- **Query via the `TrackVector` ORM model, not raw `text()` SQL** — pgvector deserializes the vector column to a list only through the ORM; raw SQL returns it as a string (same gotcha as `_recompute_norm_params`).
+- Preprocessing: **L2-normalize** the embeddings (so euclidean ≈ the cosine `/similar` uses), then **PCA-reduce to `PCA_DIMS=50`** before UMAP (speed/stability on 2048-dim). No z-score, no weights.
+- **Full refit:** fit `PCA(50)` → `pca.transform` → `UMAP(n_neighbors=8, min_dist=0.1, n_components=2, metric="euclidean").fit_transform(...)` (n_neighbors tuned down from the default 15 to emphasize local sub-genre structure; seeded, so reversible on refit). Pickle **`{"pca": pca, "umap": reducer}`** to `MAP_MODEL_PATH` (default `/data/umap_model.pkl`, backed by the `indexer_data` docker volume) so the incremental path reduces new points through the same PCA basis.
+- **Incremental:** load `{pca, umap}`; `pca.transform` the whole library (also feeds clustering), `reducer.transform()` only tracks missing from `track_map_coords` — frozen geography, cheap. Existing points keep their coords; only `cluster_id` is refreshed.
+- Default `cluster_id`: compact deterministic k-means++ (`kmeans()`, 16 clusters) on the **PCA-reduced embedding** space. The API no longer mirrors this live (the `/map/clusters` recolor endpoint was removed); the map reads the stored `cluster_id` directly.
+- **Query via the `TrackVectorEmbed` ORM model, not raw `text()` SQL** — pgvector deserializes the vector column to a list only through the ORM; raw SQL returns it as a string (same gotcha as `_recompute_norm_params`). `indexer/app/models.py` declares `TrackVectorEmbed` (`vector(2048)`).
 - **`umap-learn 0.5.6` requires `scikit-learn < 1.7`** (it calls `check_array(force_all_finite=)`, removed in sklearn 1.7). `scikit-learn==1.5.2` is pinned in `requirements.txt` for this reason.
 
 ## Normalization (Query Side, in API)
