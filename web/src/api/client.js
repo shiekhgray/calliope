@@ -29,7 +29,12 @@ api.interceptors.response.use(
       }
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
-      window.location.href = '/calliope/login'
+      // Don't bounce if we're already on the login page — a stray background
+      // 401 (e.g. an authed query firing while logged out) would otherwise
+      // hard-reload the page and wipe whatever the user is typing.
+      if (!window.location.pathname.endsWith('/login')) {
+        window.location.href = '/calliope/login'
+      }
     }
     return Promise.reject(error)
   }

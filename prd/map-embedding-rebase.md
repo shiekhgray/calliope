@@ -1,6 +1,15 @@
 # PRD: Rebase the Music Map onto the PANNs embedding
 
-**Status: Not started — follow-up to Vector Tuning**
+**Status: Tier 1 shipped (2026-06-18). Tiers 2 & 3 deferred.**
+
+Tier 1 done: `mapping.py` projects `track_vectors_embed` (L2 → PCA-50 → UMAP),
+clusters on the PCA-reduced space, and pickles `{pca, umap}` for incremental
+`transform()`. `map.py` preprocessing is L2-only; `/map/clusters` and `/map/lens`
+(DSP weight/feature surfaces) were removed; `/map` + `/map/pca` remain. `MapPage.jsx`
+dropped the Tune-weights panel + `PUT /auth/similarity-weights` save path and the
+single-feature lens; Clusters + 3-PC gestalt lenses kept. Shipped via one full
+`POST /map/rebuild`. The `sim_weight_*` columns + `PUT /auth/similarity-weights`
+still exist (no longer read by any UI) — their teardown is Tier 2.
 
 ## Motivation
 

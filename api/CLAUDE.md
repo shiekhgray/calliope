@@ -19,7 +19,7 @@ docker compose exec api alembic upgrade head
 | `search.py` | GET /search?q= (unaccent), GET/POST /search/history (auth; upsert + prune to 10) |
 | `playlists.py` | Full CRUD + add/remove/reorder tracks + similar; all endpoints require auth; GET /playlists and GET /playlists/{id} gate by can_view; track mutations gate by can_edit; DELETE is owner-only; GET /playlists returns enriched card data: art_tracks (0–4, centroid-based 2-pass selection), preview_tracks (first 3 titles), top_genres (top 4 by frequency), track_count |
 | `users.py` | GET /users (auth required) — returns [{id, username}] for all users |
-| `map.py` | GET /map (all atlas points + hover metadata + default cluster), GET /map/clusters?weighted=&w= (live KMeans recolor under saved or `w=`-overridden weights; {track_id: cluster_id}), GET /map/lens?feature= (z-scored group mean, 0–1), GET /map/pca (top-3 PCs → per-track [r,g,b] 0–1). All auth. Music Map feature. |
+| `map.py` | GET /map (all atlas points + hover metadata + stored cluster), GET /map/pca (top-3 PCs of the L2-normalized PANNs embedding → per-track [r,g,b] 0–1). All auth. Music Map feature, rebased onto `track_vectors_embed`; the DSP `/map/clusters` (weight recolor) and `/map/lens` (per-DSP-group feature) endpoints were removed in the embedding rebase. |
 | `scanner.py` | POST /scanner/trigger (auth, 409 if running), GET /scanner/status — two phases: scan + index |
 | `discover.py` | POST /discover/refresh, GET /discover/status, GET /discover(?artist_id=), POST /discover/{id}/dismiss, GET /discover/{id}/genres/fetch (Last.fm album.getInfo; read-only, nothing persisted) |
 | `compilations.py` | GET /compilations |
@@ -120,7 +120,7 @@ Genre writes (`POST /albums/{id}/genres`) normalize to lowercase before upsert. 
 
 `GET /albums/{id}/genres/suggest` reuses the same z-score + L2-normalize pipeline as `/tracks/{id}/similar` but lives in `albums.py`, not `tracks.py`. It has its own copy of `DIM_SLICES` (same values).
 
-The Music Map endpoints in `map.py` also carry their own copy of `DIM_SLICES` (same values) and reuse the identical z-score → per-group `w/5.0` scaling → L2-normalize preprocessing. `/map/clusters` and the indexer's offline default clustering share a compact deterministic k-means++ (`_kmeans`, 16 clusters, centroid-sorted ids for stable hues) so neutral-weight colors line up between offline and online. The canonical `DIM_SLICES` now lives in `app/similarity.py` (used by tracks + radio); `albums`, `playlists`, and `map` still keep their own specialized copies — keep them in sync if dims ever change.
+The Music Map endpoints in `map.py` no longer use `DIM_SLICES` — post-embedding-rebase they L2-normalize the PANNs `track_vectors_embed` (no z-score, no weights). Cluster colors come from the stored `cluster_id` computed offline by the indexer (`mapping.py` k-means on the PCA-reduced embedding). The canonical `DIM_SLICES` lives in `app/similarity.py` (used by tracks + radio); `albums` and `playlists` still keep their own specialized copies — keep them in sync if dims ever change.
 
 ## Search
 

@@ -1,18 +1,20 @@
 """Music Map atlas builder.
 
-Projects the 60-dim feature vectors to fixed 2-D coordinates (UMAP) and computes
-a default neutral-weight cluster assignment for each track. Runs offline as a
-batch step at the end of indexing, or via the manual POST /map/rebuild trigger.
+Projects the 2048-dim PANNs audio embedding (track_vectors_embed — the default
+similarity space) to fixed 2-D coordinates (UMAP) and computes a default cluster
+assignment for each track. Runs offline as a batch step at the end of indexing,
+or via the manual POST /map/rebuild trigger.
 
-Design (see prd/music-map.md):
+Design (see prd/music-map.md, prd/map-embedding-rebase.md):
   * Positions are computed ONCE and frozen. A normal rescan only `.transform()`s
     new tracks into the existing embedding, so the geography never scrambles.
   * A full refit (POST /map/rebuild) re-fits the whole library and refreshes the
     pickled model — used after large library growth.
-  * Preprocessing mirrors the similarity engine (z-score via vector_norm_params,
-    neutral weights) so the atlas faithfully reflects what the engine sees. We
-    L2-normalize before the euclidean UMAP fit so distances behave like the
-    cosine metric the /similar endpoint uses.
+  * Preprocessing mirrors the embedding similarity engine: L2-normalize (so
+    euclidean distances behave like the cosine metric /similar uses), then
+    PCA-reduce to PCA_DIMS before UMAP (standard practice for stability/speed on
+    a 2048-dim space). The fitted PCA is pickled alongside the UMAP reducer so
+    incremental transforms reduce new points through the same basis.
 """
 import os
 import pickle
@@ -24,27 +26,16 @@ import numpy as np
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from .models import TrackVector
+from .models import TrackVectorEmbed
 
-# Where the fitted UMAP model is pickled (backed by a named docker volume).
+# Where the fitted {pca, umap} models are pickled (backed by a named docker volume).
 MODEL_PATH = Path(os.environ.get("MAP_MODEL_PATH", "/data/umap_model.pkl"))
 
-# KMeans cluster count for the default (neutral-weight) coloring.
+# KMeans cluster count for the default coloring.
 N_CLUSTERS = 16
 
-
-def _zscore_matrix(db: Session, ids, vectors):
-    """Z-score the raw feature matrix using the persisted vector_norm_params."""
-    matrix = np.array(vectors, dtype=np.float64)
-    row = db.execute(text(
-        "SELECT means, stds FROM vector_norm_params WHERE id = 1"
-    )).fetchone()
-    if row:
-        means = np.array(row.means, dtype=np.float64)
-        stds = np.array(row.stds, dtype=np.float64)
-        stds[stds == 0] = 1.0
-        matrix = (matrix - means) / stds
-    return matrix
+# PCA target dimensionality before UMAP (speed/stability on the 2048-dim embedding).
+PCA_DIMS = 50
 
 
 def _l2_normalize(matrix):
@@ -106,31 +97,44 @@ def build_map(db: Session, full_refit: bool = False):
     except ImportError:
         print("Mapping: umap-learn not installed; skipping atlas build", file=sys.stderr, flush=True)
         return
+    from sklearn.decomposition import PCA
 
     # Query via ORM so the pgvector column deserializes to a list (raw SQL
     # returns the vector as a string).
-    rows = db.query(TrackVector).order_by(TrackVector.track_id).all()
+    rows = db.query(TrackVectorEmbed).order_by(TrackVectorEmbed.track_id).all()
     if len(rows) < 3:
-        print("Mapping: <3 indexed tracks, skipping atlas", flush=True)
+        print("Mapping: <3 embedded tracks, skipping atlas", flush=True)
         return
 
     all_ids = [r.track_id for r in rows]
-    all_vecs = [r.feature_vector for r in rows]
-    matrix = _l2_normalize(_zscore_matrix(db, all_ids, all_vecs))
+    matrix = _l2_normalize(np.array([r.embedding for r in rows], dtype=np.float64))
 
     have_model = MODEL_PATH.exists()
     if full_refit or not have_model:
-        print(f"Mapping: full UMAP fit on {len(all_ids)} tracks", flush=True)
+        print(f"Mapping: full PCA→UMAP fit on {len(all_ids)} tracks", flush=True)
+        n_pca = min(PCA_DIMS, matrix.shape[0], matrix.shape[1])
+        pca = PCA(n_components=n_pca, random_state=42)
+        reduced = pca.fit_transform(matrix)
+        # n_neighbors tuned down from UMAP's default 15 to emphasize LOCAL
+        # structure — the dense central genre blob fractures into sub-genre
+        # islands rather than collapsing together. The atlas is an interpretive
+        # sketch, not a metric embedding, so favoring local groupings is the
+        # intent. Seeded, so any value is reproducible / reversible on refit.
         reducer = umap.UMAP(
-            n_neighbors=15, min_dist=0.1, n_components=2, metric="euclidean",
+            n_neighbors=8, min_dist=0.1, n_components=2, metric="euclidean",
             random_state=42,
         )
-        coords = reducer.fit_transform(matrix)
+        coords = reducer.fit_transform(reduced)
         MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
         with open(MODEL_PATH, "wb") as f:
-            pickle.dump(reducer, f)
+            pickle.dump({"pca": pca, "umap": reducer}, f)
         coord_by_id = {tid: coords[i] for i, tid in enumerate(all_ids)}
     else:
+        with open(MODEL_PATH, "rb") as f:
+            model = pickle.load(f)
+        pca, reducer = model["pca"], model["umap"]
+        reduced = pca.transform(matrix)  # full library, reused for clustering below
+
         existing = {
             r.track_id for r in db.execute(text(
                 "SELECT track_id FROM track_map_coords"
@@ -139,17 +143,15 @@ def build_map(db: Session, full_refit: bool = False):
         new_idx = [i for i, tid in enumerate(all_ids) if tid not in existing]
         if not new_idx:
             print("Mapping: no new tracks to place", flush=True)
-            # still refresh clusters below (norms/library may have shifted)
+            # still refresh clusters below (library may have shifted)
             coord_by_id = {}
         else:
             print(f"Mapping: transforming {len(new_idx)} new tracks", flush=True)
-            with open(MODEL_PATH, "rb") as f:
-                reducer = pickle.load(f)
-            new_coords = reducer.transform(matrix[new_idx])
+            new_coords = reducer.transform(reduced[new_idx])
             coord_by_id = {all_ids[i]: new_coords[n] for n, i in enumerate(new_idx)}
 
-    # Default clusters: full 60-D z-scored + L2 space, neutral weights.
-    labels = kmeans(matrix, N_CLUSTERS)
+    # Default clusters: PCA-reduced embedding space.
+    labels = kmeans(reduced, N_CLUSTERS)
     cluster_by_id = {tid: int(labels[i]) for i, tid in enumerate(all_ids)}
 
     # Upsert: new tracks get fresh coords; existing tracks keep coords but
