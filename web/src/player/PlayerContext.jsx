@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
+import { useAuth } from '../auth/AuthContext'
 
 const PlayerContext = createContext(null)
 
@@ -26,6 +27,7 @@ function loadSavedState() {
 }
 
 export function PlayerProvider({ children }) {
+  const { loggedIn } = useAuth()
   const saved = useRef(loadSavedState())
 
   const [currentTrack, setCurrentTrack] = useState(saved.current?.track ?? null)
@@ -58,6 +60,7 @@ export function PlayerProvider({ children }) {
     queryKey: ['me'],
     queryFn: () => api.get('/auth/me').then((r) => r.data),
     staleTime: Infinity,
+    enabled: loggedIn,
   })
   useEffect(() => {
     if (!me) return
